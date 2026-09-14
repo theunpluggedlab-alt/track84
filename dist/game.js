@@ -160,7 +160,12 @@ function formatTime(time){return time.toFixed(2).padStart(5,'0');}
 
 function renderOverlay(){
   let state=engine.phase;
-  if(engine.player.finishTime!==null&&state!=='paused')state='results';
+  // Long jump shows every landing first: keep the pit visible until all five
+  // have landed or fouled, then show the ranking. Other events cut to results
+  // as soon as you finish.
+  if(engine.mode==='longjump'){
+    if(engine.phase==='finished'&&state!=='paused')state='results';
+  }else if(engine.player.finishTime!==null&&state!=='paused')state='results';
   const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${soloScreen}-${selStage}-${session.event}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
   if(key===overlayKey){if(state==='results')renderResults();return;}
   overlayKey=key;$('overlay').hidden=state==='racing';
@@ -341,6 +346,7 @@ function renderHud(){
   if(rowing)$('jump-sub').textContent=p.powerCharges>0?`×${p.powerCharges} LEFT`:'USED';
   const status=$('jump-status');status.classList.toggle('perfect',cue);
   if(engine.phase==='ready')status.textContent=rowing?'L R · ROW WHEN READY':longjump?'L R · GET READY':'L R · GET READY';
+  else if(longjump&&p.finishTime!==null&&engine.phase!=='finished')status.textContent=p.foul?'FOUL · WATCH THE OTHERS':`MARK ${p.best.toFixed(2)}m · WATCH THE OTHERS`;
   else if(p.finishTime!==null)status.textContent=rowing?'FINISH · GLIDE HOME!':longjump?(p.foul?'FOUL · OVER THE LINE':`MARK ${p.best.toFixed(2)}m`):'FINISH · WELL RUN!';
   else if(engine.phase==='paused')status.textContent='Paused';
   else if(longjump&&p.foul)status.textContent='FOUL · OVER THE LINE';
@@ -628,6 +634,7 @@ function netRenderHud(){
   if(net.screen==='menu') status.textContent = 'CREATE OR JOIN A ROOM';
   else if(net.screen==='lobby') status.textContent = netIsHost() ? 'PRESS START WHEN READY' : 'Waiting for the host…';
   else if(!own) status.textContent = 'Waiting for the host…';
+  else if(longjump&&own.finishTime!=null&&net.view.phase!=='finished') status.textContent = own.foul?'FOUL · WATCH THE OTHERS':`MARK ${(own.best||0).toFixed(2)}m · WATCH THE OTHERS`;
   else if(own.finishTime!==null) status.textContent = rowing?'FINISH · GLIDE HOME!':longjump?(own.foul?'FOUL':`MARK ${(own.best||0).toFixed(2)}m`):'FINISH · WELL RUN!';
   else if(net.view.phase==='countdown') status.textContent = 'ON YOUR MARKS…';
   else if(longjump&&own.foul) status.textContent = 'FOUL';
