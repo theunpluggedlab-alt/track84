@@ -3,6 +3,7 @@
 // function so it can be unit-tested with fake sockets.
 import { RaceEngine } from '../dist/engine.js';
 import { STAGES } from '../dist/stages.js';
+import { isEvent } from '../dist/events.js';
 
 export const SNAP_EVERY = 6; // 20 snapshots/sec at 120 Hz
 export const MAX_INPUTS_PER_SEC = 30;
@@ -28,14 +29,19 @@ export class Room {
     this.code = code;
     this.send = send; // (player, obj) => void
     this.stage = Math.min(STAGES.length - 1, Math.max(0, stage | 0));
+    this.event = isEvent(opts.event) ? opts.event : 'hurdles';
     this.phase = 'lobby'; // lobby | racing | over
     // Idle/disconnected-human safety: never let a race run forever.
     this.timeout = Number.isFinite(opts.timeout) ? opts.timeout : 180;
     this.players = []; // {id,name,lane,connected,seq,host,inputStamps[]}
     this.engine = new RaceEngine(84 + ((Math.random() * 1e9) | 0));
     this.engine.setStage(this.stage);
+    this.engine.setEvent(this.event);
     this.sentOver = false;
     this.snapTick = 0;
+    // Grace period: when everyone disconnects (app switch, refresh), the
+    // room survives briefly so players can come back. The host clears it.
+    this.emptySince = null;
   }
   get host() { return this.players[0] ?? null; }
   connected() { return this.players.filter(p => p.connected); }
@@ -57,11 +63,16 @@ export class Room {
     const ghost = this.players.find(p => !p.connected && p.name === cleanName(name));
     if (!ghost) return null;
     ghost.connected = true; ghost.seq = -1; ghost.inputStamps = [];
+    // The host coming back takes the crown again if nobody holds it.
+    if (!this.players.some(p => p.host)) ghost.host = true;
     this.engine.setHuman(`runner-${ghost.lane}`, true);
     const r = this.engine.runners[ghost.lane];
     if (r) r.name = ghost.name;
     this.broadcastRoom();
     return ghost;
+  }
+  isEmptyExpired(now = Date.now(), ttl = 5 * 60 * 1000) {
+    return this.connected().length === 0 && this.emptySince != null && now - this.emptySince > ttl;
   }
   removePlayer(player) {
     player.connected = false;
@@ -93,6 +104,16 @@ export class Room {
   setStage(index) {
     this.stage = Math.min(STAGES.length - 1, Math.max(0, index | 0));
     this.engine.setStage(this.stage);
+    this.engine.setEvent(this.event);
+    this.engine.reset(this.engine.seed, this.connected().map(p => `runner-${p.lane}`));
+    this.nameLanes();
+    this.phase = 'lobby'; this.sentOver = false;
+    this.broadcastRoom();
+  }
+  setEvent(id) {
+    // The host picks the discipline; the room returns to the lobby either way.
+    this.event = isEvent(id) ? id : 'hurdles';
+    this.engine.setEvent(this.event);
     this.engine.reset(this.engine.seed, this.connected().map(p => `runner-${p.lane}`));
     this.nameLanes();
     this.phase = 'lobby'; this.sentOver = false;
@@ -102,6 +123,7 @@ export class Room {
     if (this.phase === 'racing' || !this.connected().length) return false;
     this.syncHumans();
     this.engine.setStage(this.stage);
+    this.engine.setEvent(this.event);
     this.engine.reset((Math.random() * 1e9) | 0, this.connected().map(p => `runner-${p.lane}`));
     this.nameLanes();
     this.phase = 'racing'; this.sentOver = false;
@@ -123,18 +145,21 @@ export class Room {
     const e = this.engine;
     return {
       t: 'snap', tick: e.tick, time: e.time, phase: e.phase, countdown: e.countdown,
-      stage: e.stageIndex,
+      stage: e.stageIndex, mode: e.mode, distance: e.distance,
       runners: e.runners.map(r => ({
         id: r.id, lane: r.lane, name: r.name, color: r.color, human: r.human,
         x: r.x, speed: r.speed, cadence: r.cadence, jumpAge: r.jumpAge,
         fallRemaining: r.fallRemaining, falls: r.falls, cleared: r.cleared,
         hurdleIndex: r.hurdleIndex, hurdleResults: r.hurdleResults, finishTime: r.finishTime,
+        // Rowing
+        stamina: r.stamina, strokes: r.strokes, crabs: r.crabs, crabRemaining: r.crabRemaining,
+        swing: r.swing, powerTen: r.powerTen, powerCharges: r.powerCharges, falseStart: r.falseStart,
       })),
     };
   }
   roomState() {
     return {
-      t: 'room', code: this.code, stage: this.stage, phase: this.phase,
+      t: 'room', code: this.code, stage: this.stage, event: this.event, phase: this.phase,
       players: this.players.map(p => ({ id: p.id, name: p.name, lane: p.lane, host: !!p.host, connected: p.connected })),
     };
   }
@@ -174,8 +199,8 @@ export class Room {
     if (this.engine.phase === 'finished' && !this.sentOver) {
       this.sentOver = true;
       this.phase = 'over';
-      const order = this.engine.standings().map(r => ({ id: r.id, lane: r.lane, name: r.name, finishTime: r.finishTime, cleared: r.cleared, falls: r.falls }));
-      const msg = { t: 'over', stage: this.stage, standings: order };
+      const order = this.engine.standings().map(r => ({ id: r.id, lane: r.lane, name: r.name, finishTime: r.finishTime, cleared: r.cleared, falls: r.falls, strokes: r.strokes, crabs: r.crabs }));
+      const msg = { t: 'over', stage: this.stage, event: this.event, standings: order };
       for (const p of this.connected()) this.send(p, msg);
       this.broadcastRoom();
     }

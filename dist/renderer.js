@@ -1,4 +1,5 @@
 import {RULES} from './engine.js';
+import { ROWING } from './events.js';
 import { STAGES } from './stages.js';
 
 const FALLBACK = { year: 1984, city: 'Los Angeles', country: 'United States', cc: 'US', code: 'USA', stadium: "Stadium '84", flag: 'US', sky: ['#6b7fb8', '#2a2a4a'], stand: ['#4c4a5f', '#444357'], roof: '#3a3f4a', accent: '#d5ff64', landmark: 'palms' };
@@ -31,6 +32,9 @@ export class TrackRenderer {
     }
     c.fillStyle='#15172a55';c.fillRect(0,0,w,horizon*.42);
     this.drawBanner(c,w,horizon,stage);
+    // Rowing is a different course on the same stage dressing: bank, water and
+    // sculls instead of the tartan track with hurdles.
+    if(e?.mode==='rowing'){this.drawRegatta(c,w,h,horizon,stage,e,now);return;}
     // Lane geometry and actors are functional game graphics, rendered at pixel scale.
     const trackTop=horizon+7, laneH=(h-trackTop-23)/5, skew=18;
     const scale=Math.max(13,Math.min(30,w/32));
@@ -242,5 +246,113 @@ export class TrackRenderer {
     if(r.human&&e.phase==='racing'&&e.jumpWindow(r).ideal&&r.jumpAge===null&&r.fallRemaining===0){
       c.strokeStyle='#d5ff64';c.lineWidth=2;c.setLineDash([4,4]);c.beginPath();c.ellipse(x,y+2,17*p,4*p,0,0,Math.PI*2);c.stroke();c.setLineDash([]);
     }
+  }
+  // ---- Rowing: the regatta course -------------------------------------------
+  // The camera, the national dressing and the pixel scale are the track's, but
+  // the surface is water, the actors are single sculls, and everything the crew
+  // does is visible: blades catch, hulls glide, bows throw spray.
+  drawRegatta(c,w,h,horizon,stage,e,now){
+    const total=ROWING.distance;
+    const waterTop=horizon+5,laneH=(h-waterTop-23)/5,skew=12;
+    const scale=Math.max(8,Math.min(19,w/36));
+    const anchor=w<600?w*.26:w*.24;
+    this.camera=Math.max(0,e.player.x*scale-(anchor-65));
+    const sx=(m,lane)=>65+m*scale-this.camera+(2-lane)*8;
+    const sy=(x,lane)=>waterTop+laneH*(lane+.5)-(x/w)*skew;
+    const g=c.createLinearGradient(0,waterTop,0,h);
+    g.addColorStop(0,'#4691c4');g.addColorStop(.42,'#2b6f9c');g.addColorStop(1,'#123c5c');
+    c.fillStyle=g;c.fillRect(0,waterTop,w,h-waterTop);
+    for(let lane=0;lane<5;lane++){
+      const top=waterTop+laneH*lane;
+      c.fillStyle=lane===2?'#337fab':lane%2?'#266c96':'#2b739f';
+      c.beginPath();c.moveTo(0,top);c.lineTo(w,top-skew);c.lineTo(w,top+laneH-skew);c.lineTo(0,top+laneH);c.closePath();c.fill();
+      c.strokeStyle=lane===2?(stage.accent||'#d5ff64'):'#8fd4ff33';c.lineWidth=lane===2?1.6:1;
+      c.beginPath();c.moveTo(0,top);c.lineTo(w,top-skew);c.stroke();
+      // Lane rope with buoys, every 12.5m like a real 500m course.
+      for(let m=0;m<=total;m+=12.5){
+        const x=sx(m,lane+1);
+        if(x<-8||x>w+8)continue;
+        const y=waterTop+laneH*(lane+1)-(x/w)*skew;
+        c.fillStyle=(Math.round(m/12.5)%2)?'#edf1e4':'#c8552f';
+        c.beginPath();c.arc(x,y,Math.max(1.2,scale*.09),0,Math.PI*2);c.fill();
+      }
+    }
+    // Distance boards across the water, plus the start and finish gates.
+    c.font='bold 10px monospace';
+    for(let m=100;m<total;m+=100){
+      const x=sx(m,4);
+      if(x<-30||x>w+30)continue;
+      c.fillStyle='#eaf6ff55';c.fillRect(Math.round(x),waterTop,1,h-waterTop-21);
+      c.fillStyle='#eaf6ffcc';c.fillText(`${m}m`,Math.round(x)+4,h-26);
+    }
+    const start=sx(0,4);
+    if(start>-30&&start<w+30){c.fillStyle='#edf1e4';c.fillRect(Math.round(start),waterTop,3,h-waterTop-21);}
+    const fin=sx(total,4);
+    if(fin>-40&&fin<w+40){
+      for(let y=waterTop;y<h-21;y+=8){c.fillStyle=(Math.floor((y-waterTop)/8)%2)?'#141522':'#edeee8';c.fillRect(Math.round(fin),y,8,4);}
+      c.fillStyle='#10121fee';c.fillRect(Math.round(fin)-46,waterTop-16,100,15);
+      c.strokeStyle=stage.accent||'#d5ff64';c.lineWidth=1;c.strokeRect(Math.round(fin)-45.5,waterTop-15.5,99,14);
+      c.fillStyle='#f3f1ff';c.textAlign='center';c.fillText('FINISH',Math.round(fin)+4,waterTop-5);c.textAlign='left';
+    }
+    for(let lane=4;lane>=0;lane--){
+      const r=e.runners[lane];if(!r)continue;
+      const x=sx(r.x,lane),y=sy(x,lane);
+      if(x>-90&&x<w+90)this.boat(x,y,r,e,laneH,now);
+    }
+    // Foreground sheen and distance rail, then the shared scanlines.
+    c.fillStyle='#ffffff12';
+    for(let i=0;i<7;i++){const y=waterTop+((i*97+Math.floor(this.camera/3))%(h-waterTop));c.fillRect(0,y,w,1);}
+    c.fillStyle='#0d2c44';c.fillRect(0,h-21,w,21);c.fillStyle='#a9cddf';c.font='10px monospace';
+    const base=Math.floor(e.player.x/50)*50;
+    for(let m=Math.max(0,base-50);m<=Math.min(total,base+150);m+=25){const x=sx(m,4);if(x<0||x>w)continue;c.fillRect(x,h-20,1,5);c.fillText(`${m}m`,x+5,h-7);}
+    c.fillStyle='#070a1214';for(let y=0;y<h;y+=4)c.fillRect(0,y,w,1);
+    if(e.phase==='racing'&&e.player.crabRemaining>0){c.fillStyle='#ed755117';c.fillRect(0,0,w,h);}
+  }
+  // A single scull: pointed hull, sliding seat, two blades, wake and spray.
+  boat(x,y,r,e,laneH,now){
+    const c=this.ctx,p=Math.max(1.5,Math.min(3,laneH/21));
+    const len=Math.max(24,laneH*1.02),hull=Math.max(5,laneH*.2);
+    const crab=r.crabRemaining>0,moving=r.speed>.4;
+    const phase=moving?((r.strokes+now*.001*(r.cadence||0))%1):0;
+    const drive=phase<.55;
+    const skin='#f3bc91',dark='#252237';
+    const rect=(px,py,pw,ph,color)=>{c.fillStyle=color;c.fillRect(Math.round(px*p),Math.round(py*p),Math.ceil(pw*p),Math.ceil(ph*p));};
+    c.save();c.translate(Math.round(x),Math.round(y));
+    if(crab)c.rotate(Math.sin(now*.02)*.16+(r.lane%2?-.08:.08));
+    if(moving){
+      const tail=Math.min(len*2.4,r.speed*4.2);
+      c.fillStyle='#e8f4ff26';
+      c.beginPath();c.moveTo(-len*.45,-hull*.35);c.lineTo(-len*.45-tail,-hull*2.3);c.lineTo(-len*.45-tail,hull*2.3);c.lineTo(-len*.45,hull*.35);c.closePath();c.fill();
+      c.strokeStyle='#ffffff3d';c.lineWidth=Math.max(1,p*.7);
+      c.beginPath();c.moveTo(-len*.5,-hull*.4);c.lineTo(-len*.5-tail*.75,-hull*1.6);c.moveTo(-len*.5,hull*.4);c.lineTo(-len*.5-tail*.75,hull*1.6);c.stroke();
+    }
+    const blade=(bx,by,far)=>{rect(bx-p*.9,by-p*.5,p*3.2,p*1.6,far?'#cfd6e6':'#e9edf7');if(drive)rect(bx+p*1.2,by-p*.4,p*2,p*1.4,'#ffffff88');};
+    const grip=-len*.06-drive*len*.16;
+    // Far oar, then the hull, then the crew, then the near oar on top.
+    rect(grip,-hull*.5-p*3.4,len*.5+p*2,p*.8,'#8f95ad');
+    blade(grip+len*.5,-hull*1.5,true);
+    c.beginPath();c.moveTo(-len*.5,0);c.lineTo(-len*.34,-hull*.5);c.lineTo(len*.34,-hull*.5);c.lineTo(len*.5,0);c.lineTo(len*.34,hull*.5);c.lineTo(-len*.34,hull*.5);c.closePath();
+    c.fillStyle=r.color;c.fill();c.strokeStyle='#00000055';c.lineWidth=1;c.stroke();
+    rect(-len*.34,-hull*.5,len*.68,Math.max(1,hull*.22),'#ffffff55');
+    const seat=-len*.06+(drive?len*.09:-len*.09);
+    rect(seat-len*.05,-hull*.5-p*2.2,len*.1,p*.9,dark);
+    rect(seat-len*.02,-hull*.5-p*6.6,p*3.4,p*4.4,crab?'#ff9b85':r.color);
+    rect(seat+p*.6,-hull*.5-p*5.4,p*2.6,p*1.6,crab?dark:skin);
+    rect(seat+p*1.4,-hull*.5-p*6.8,p*3.6,Math.max(p*.8,1),skin);
+    rect(seat+p*3,-hull*.5-p*7.6,p*1.8,p*2,skin);
+    rect(seat-len*.02,-hull*.5-p*8.4,p*3.6,p*1.6,dark);
+    if(crab)rect(seat-p*2,-hull*.5-p*10.6,p*4,p*1.8,'#ff8e77');
+    else if(r.powerTen>0){for(let i=0;i<3;i++)rect(-len*.5-p*(2+i*2.4),-p*1.4+Math.sin(now*.02+i)*p,i>0?p*1.4:p*2,p*(2.4-i*.5),['#ffd166','#ff8a3d','#ff5b3d'][i]);}
+    else if(r.swing)rect(-len*.5-p*1.6,-p*.6,p*1.4,p*1.2,'#9ff0ff99');
+    rect(grip,-hull*.5+p*2.6,len*.5+p*2,p*.8,'#b9c0d6');
+    blade(grip+len*.5,-hull*.5+p*4.2,false);
+    if(r.speed>9){const n=Math.min(4,(r.speed/5)|0);for(let i=0;i<n;i++)rect(len*.45+i*p*1.7,-hull*.5+Math.sin(now*.01+i)*p*.7,p,p,'#ffffffbb');}
+    if(r.human){
+      c.fillStyle='#d5ff64';c.font=`bold ${Math.max(10,p*4)}px monospace`;c.textAlign='center';
+      c.fillText(r.name||'YOU',0,-laneH*.72,Math.min(110,Math.max(60,x*1.2)));
+      c.fillRect(-p*.6,-laneH*.72+p*.6,p*1.2,p*.7);
+      c.textAlign='left';
+    }
+    c.restore();
   }
 }

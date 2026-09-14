@@ -25,6 +25,15 @@ const TICK_MS = 1000 / 120;
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.json': 'application/json' };
 
 const rooms = new Map(); // code -> Room
+// Empty rooms linger briefly (share-sheet app switch, refresh) instead of
+// vanishing the moment the last socket drops. Swept below after the TTL.
+const EMPTY_TTL_MS = 5 * 60 * 1000;
+const MAX_ROOMS = 100;
+
+function touchRoom(room) { room.emptySince = null; }
+function noteEmpty(room) {
+  if (room && rooms.get(room.code) === room && !room.connected().length) room.emptySince = Date.now();
+}
 
 function safeSend(ws, data) {
   try { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); } catch { /* ignore */ }
@@ -55,7 +64,7 @@ wss.on('connection', (ws) => {
     const room = ws._room, player = ws._player;
     if (room && player && rooms.get(room.code) === room) {
       room.removePlayer(player);
-      if (!room.connected().length) rooms.delete(room.code);
+      noteEmpty(room);
     }
   });
 });
@@ -66,8 +75,9 @@ function onMessage(ws, msg) {
   switch (msg.t) {
     case 'ping': safeSend(ws, { t: 'pong', at: msg.at ?? 0, serverAt: Date.now() }); return;
     case 'create': {
+      if (rooms.size >= MAX_ROOMS) { safeSend(ws, { t: 'err', msg: 'Server is full, try again' }); return; }
       const code = makeCode((c) => rooms.has(c));
-      const room = new Room(code, sendTo, msg.stage ?? 0);
+      const room = new Room(code, sendTo, msg.stage ?? 0, { event: msg.event });
       rooms.set(code, room);
       const player = room.addPlayer(msg.name, ws);
       if (!player) { safeSend(ws, { t: 'err', msg: 'Room is full' }); return; }
@@ -79,9 +89,11 @@ function onMessage(ws, msg) {
     case 'join': {
       const room = rooms.get(String(msg.code ?? '').toUpperCase());
       if (!room) { safeSend(ws, { t: 'err', msg: 'Room not found' }); return; }
-      if (room.phase === 'racing') { safeSend(ws, { t: 'err', msg: 'Race in progress' }); return; }
-      const player = room.reclaim(msg.name) ?? room.addPlayer(msg.name, ws);
-      if (!player) { safeSend(ws, { t: 'err', msg: 'Room is full' }); return; }
+      touchRoom(room);
+      // A dropped phone coming back reclaims its lane — even mid-race,
+      // when its lane has been AI-driven meanwhile. Fresh joins wait.
+      const player = room.reclaim(msg.name) ?? (room.phase === 'racing' ? null : room.addPlayer(msg.name, ws));
+      if (!player) { safeSend(ws, { t: 'err', msg: room.phase === 'racing' ? 'Race in progress' : 'Room is full' }); return; }
       player.ws = ws; ws._player = player; ws._room = room;
       safeSend(ws, { t: 'you', id: player.id, lane: player.lane });
       room.broadcastRoom();
@@ -91,7 +103,7 @@ function onMessage(ws, msg) {
       const room = ws._room, player = ws._player;
       if (room && player && rooms.get(room.code) === room) {
         room.removePlayer(player);
-        if (!room.connected().length) rooms.delete(room.code);
+        noteEmpty(room);
       }
       ws._room = null; ws._player = null;
       return;
@@ -100,6 +112,12 @@ function onMessage(ws, msg) {
       const room = ws._room, player = ws._player;
       if (!room || !player?.host || room.phase === 'racing') return;
       room.setStage(msg.index ?? 0);
+      return;
+    }
+    case 'event': {
+      const room = ws._room, player = ws._player;
+      if (!room || !player?.host || room.phase === 'racing') return;
+      room.setEvent(msg.event);
       return;
     }
     case 'start':
@@ -126,6 +144,14 @@ setInterval(() => {
     if (room.phase === 'racing') room.step();
   }
 }, TICK_MS);
+
+// Sweep rooms left empty past the grace period.
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, room] of rooms) {
+    if (room.isEmptyExpired(now, EMPTY_TTL_MS)) rooms.delete(code);
+  }
+}, 30 * 1000);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`TRACK/84 host on http://localhost:${PORT} (open http://<LAN-address>:${PORT} from phones)`);

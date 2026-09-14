@@ -1,5 +1,6 @@
 import {RaceEngine, PLAYER_ID, RULES} from './engine.js';
 import { STAGES } from './stages.js';
+import { DEFAULT_EVENT, isEvent } from './events.js';
 
 const CAREER_KEY = 'track84-career-v1';
 
@@ -20,8 +21,9 @@ export class RaceSession {
   constructor({transport=new LocalTransport(),seed=84}={}) {
     this.engine=new RaceEngine(seed);this.transport=transport;this.sequence=0;this.lastSequence=new Map();this.playerName='';
     this.disconnect=transport.onInput(command=>this.receive(command));this.accumulator=0;
-    this.stageIndex=0;this.unlocked=0;this.medals={};this.lives=MAX_LIVES;
+    this.stageIndex=0;this.unlocked=0;this.medals={};this.lives=MAX_LIVES;this.event=DEFAULT_EVENT;
     this.loadCareer();
+    this.engine.setEvent(this.event);
   }
   loadCareer(){
     try{
@@ -29,13 +31,18 @@ export class RaceSession {
       if(!raw)return;
       const data=JSON.parse(raw);
       if(Number.isInteger(data.unlocked))this.unlocked=Math.min(STAGES.length-1,Math.max(0,data.unlocked));
-      if(data.medals&&typeof data.medals==='object')this.medals=data.medals;
+      if(data.medals&&typeof data.medals==='object'){
+        // Medals are stored per event; pre-rowing saves used the bare stage index.
+        this.medals={};
+        for(const [key,value] of Object.entries(data.medals))this.medals[/^\d+$/.test(key)?`hurdles:${key}`:key]=value;
+      }
+      if(isEvent(data.event))this.event=data.event;
       if(typeof data.playerName==='string')this.playerName=data.playerName.slice(0,12);
       if(Number.isInteger(data.lives))this.lives=Math.min(MAX_LIVES,Math.max(0,data.lives));
     }catch{}
   }
   saveCareer(){
-    try{localStorage.setItem(CAREER_KEY,JSON.stringify({unlocked:this.unlocked,medals:this.medals,playerName:this.playerName,lives:this.lives}));}catch{}
+    try{localStorage.setItem(CAREER_KEY,JSON.stringify({unlocked:this.unlocked,medals:this.medals,playerName:this.playerName,lives:this.lives,event:this.event}));}catch{}
   }
   setStage(index){
     const i=Math.min(STAGES.length-1,Math.max(0,index|0));
@@ -43,8 +50,17 @@ export class RaceSession {
     this.engine.setStage(i);
     return i;
   }
+  setEvent(id){
+    // The chosen discipline is part of the runner's career: medals and the
+    // resume point are remembered per event, lives and tour progress are shared.
+    if(isEvent(id))this.event=id;
+    this.engine.setEvent(this.event);
+    this.saveCareer();
+    return this.event;
+  }
+  medalCount(event=this.event){return Object.keys(this.medals).filter(key=>key.startsWith(`${event}:`)).length;}
   recordResult(rank, advance=false){
-    this.medals[this.stageIndex]=rank;
+    this.medals[`${this.event}:${this.stageIndex}`]=rank;
     // Linear tour: only a top-3 finish unlocks the next Games.
     if(advance&&this.stageIndex>=this.unlocked&&this.stageIndex<STAGES.length-1)this.unlocked=this.stageIndex+1;
     // Arcade lives: every finish outside the top 3 costs one life.
@@ -71,6 +87,6 @@ export class RaceSession {
     this.accumulator+=Math.min(Math.max(elapsed,0),.1);
     while(this.accumulator>=RULES.step){this.engine.step();this.accumulator-=RULES.step;}
   }
-  restart(playerName=this.playerName,stageIndex=this.stageIndex){this.playerName=String(playerName).trim().slice(0,12);this.setStage(stageIndex);this.engine.reset(84+(this.stageIndex*17));this.engine.player.name=this.playerName||'YOU';this.accumulator=0;this.lastSequence.clear();this.saveCareer();this.engine.start();}
+  restart(playerName=this.playerName,stageIndex=this.stageIndex){this.playerName=String(playerName).trim().slice(0,12);this.setStage(stageIndex);this.engine.setEvent(this.event);this.engine.reset(84+(this.stageIndex*17));this.engine.player.name=this.playerName||'YOU';this.accumulator=0;this.lastSequence.clear();this.saveCareer();this.engine.start();}
   close(){this.disconnect?.();this.transport.close();}
 }

@@ -258,6 +258,15 @@ body{touch-action:manipulation;overscroll-behavior-y:none;min-height:100dvh}
   .arena{height:clamp(280px,calc(100dvh - 480px),360px)}
   .stage-name{font-size:clamp(18px,6vw,22px)}
   .stage-select{font-size:13px}
+/* Olympic event picker on the start card (110m hurdles / 500m single sculls). */
+.event-picker{display:flex;gap:6px;justify-content:center;margin:0 auto 12px;max-width:360px;width:100%}
+.event-option{flex:1 1 0;min-width:0;font-family:inherit;font-size:12px;line-height:1.35;color:#c9c4e4;background:#1b1f33;border:1px solid #4b4666;border-radius:6px;padding:9px 6px;min-height:42px;cursor:pointer}
+.event-option:hover{border-color:var(--violet)}
+.event-option[aria-pressed="true"]{background:var(--lime);border-color:var(--lime);color:#20251b;font-weight:800}
+/* On the water the race-strip pips are the crew's stamina, so the last lit pip
+   is the warning light rather than the next hurdle. */
+.hurdle-pips[aria-label^="Stamina"] i.next{background:#ffc46a;border-color:#ffc46a}
+@media (max-width:520px){.event-option{font-size:10px;min-height:38px;padding:7px 4px}}
   .link-button.net-cta{font-size:13px}
   .jump-status{font-size:10px}
 }

@@ -64,10 +64,11 @@ export class NetClient {
     return false;
   }
   ping() { this.send({ t: 'ping', at: Date.now() }); }
-  create(name, stage = 0) { this.send({ t: 'create', name, stage }); }
+  create(name, stage = 0, event = 'hurdles') { this.send({ t: 'create', name, stage, event }); }
   join(code, name) { this.send({ t: 'join', code: String(code || '').toUpperCase(), name }); }
   leave() { this.send({ t: 'leave' }); }
   setStage(index) { this.send({ t: 'stage', index }); }
+  setEvent(event) { this.send({ t: 'event', event }); }
   start() { this.send({ t: 'start' }); }
   again() { this.send({ t: 'again' }); }
   input(action) {
@@ -88,12 +89,15 @@ export class NetView {
     this.runners = []; this.phase = 'lobby'; this.time = 0; this.tick = 0;
     this.countdown = 3; this.stageIndex = 0; this.ownLane = 2;
     this.idealLo = 0.24; this.idealHi = 0.49;
+    this.mode = 'hurdles'; this.distance = 110;
   }
   applySnap(snap, ownLane) {
     this.runners = (snap.runners ?? []).map(r => ({ ...r }));
     this.phase = snap.phase ?? this.phase;
     this.time = snap.time ?? 0; this.tick = snap.tick ?? 0;
     this.countdown = snap.countdown ?? 3;
+    if (typeof snap.mode === 'string') this.mode = snap.mode;
+    if (Number.isFinite(snap.distance)) this.distance = snap.distance;
     if (Number.isInteger(snap.stage)) {
       this.stageIndex = snap.stage;
       const d = difficultyFor(snap.stage);
@@ -108,7 +112,7 @@ export class NetView {
   }
   jumpWindow(r) {
     r = r ?? this.player;
-    if (!r) return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+    if (!r || this.mode === 'rowing') return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
     const d = (RULES.hurdles[r.hurdleIndex] ?? Infinity) - r.x;
     const timeTo = d / Math.max(r.speed, 0.1);
     return { distance: d, timeTo, ideal: timeTo >= this.idealLo && timeTo <= this.idealHi, near: timeTo >= 0 && timeTo < 0.9 };
@@ -143,4 +147,30 @@ export function parseInviteCode(search) {
     const params = new URLSearchParams(String(search || ''));
     return formatCode(params.get('room') || '');
   } catch { return ''; }
+}
+
+// Resume: remember the last joined room so a refresh / app-switch return
+// rejoins it instead of stranding the player on the solo screen. The entry
+// expires quickly and is cleared on manual leave or unknown rooms.
+const RESUME_KEY = 'track84-net-resume-v1';
+export const RESUME_TTL_MS = 30 * 60 * 1000;
+export function saveResume(code, name) {
+  try {
+    const clean = formatCode(code);
+    if (clean.length !== 4) return;
+    localStorage.setItem(RESUME_KEY, JSON.stringify({ code: clean, name: String(name || '').slice(0, 12), at: Date.now() }));
+  } catch { /* ignore */ }
+}
+export function loadResume(now = Date.now()) {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const code = formatCode(data.code);
+    if (code.length !== 4 || !Number.isFinite(data.at) || now - data.at > RESUME_TTL_MS) return null;
+    return { code, name: String(data.name || '').slice(0, 12) };
+  } catch { return null; }
+}
+export function clearResume() {
+  try { localStorage.removeItem(RESUME_KEY); } catch { /* ignore */ }
 }

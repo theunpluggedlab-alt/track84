@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Room, makeCode, cleanName } from '../server/room.mjs';
-import { NetView, netStandings, inviteLinkFor, parseInviteCode } from '../dist/net.js';
+import { NetView, netStandings, inviteLinkFor, parseInviteCode, saveResume, loadResume, clearResume, RESUME_TTL_MS } from '../dist/net.js';
 
 function harness(stage = 0) {
   const outbox = new Map(); // playerId -> received objects
@@ -129,6 +129,38 @@ test('invite links round-trip the 4-letter room code', () => {
   assert.equal(parseInviteCode('?room=AB12&foo=1'), 'AB12');
   assert.equal(parseInviteCode(''), '');
   assert.equal(parseInviteCode('?foo=1'), '');
+});
+test('resume remembers the room briefly, then expires or clears', () => {
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  };
+  try {
+    assert.equal(loadResume(), null);
+    saveResume('ab12', 'ALICE');
+    assert.deepEqual(loadResume(), { code: 'AB12', name: 'ALICE' });
+    assert.equal(loadResume(Date.now() + RESUME_TTL_MS + 1), null);
+    saveResume('TOOLONGCODE', 'BOB');
+    assert.equal(loadResume().code, 'TOOL');
+    clearResume();
+    assert.equal(loadResume(), null);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+test('empty rooms expire only after the grace period, host reclaims crown', () => {
+  const { room } = harness(0);
+  const a = room.addPlayer('ALICE');
+  assert.equal(a.host, true);
+  room.removePlayer(a);
+  room.emptySince = 1000;
+  assert.equal(room.isEmptyExpired(1000 + 60 * 1000), false);
+  assert.equal(room.isEmptyExpired(1000 + 5 * 60 * 1000 + 1), true);
+  const back = room.reclaim('ALICE');
+  assert(back && back.lane === a.lane);
+  assert.equal(back.host, true);
 });
 test('NetView exposes player, jump cue and standings', () => {
   const { room } = harness(0);
