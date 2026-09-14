@@ -1,0 +1,17 @@
+# Fly.io internet host for TRACK/84 multiplayer.
+# Usage: fly launch (no postgres/redis) then fly deploy. See README.
+app = "track84-host"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[http_service]
+  internal_port = 4173
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"

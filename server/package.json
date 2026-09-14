@@ -1,0 +1,13 @@
+{
+  "name": "track84-host",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authoritative LAN/internet host for TRACK/84 realtime multiplayer (up to 5 phones).",
+  "scripts": {
+    "host": "node host.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

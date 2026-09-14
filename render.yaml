@@ -1,0 +1,11 @@
+# Render.com internet host for TRACK/84 multiplayer.
+# Usage: New → Web Service → point at this repo, Docker runtime. See README.
+services:
+  - type: web
+    name: track84-host
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: .
+    plan: free
+    region: virginia
+    healthCheckPath: /

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node dev-server.mjs",
+    "host": "node server/host.mjs",
     "test": "node --test tests/*.test.mjs"
   }
 }
