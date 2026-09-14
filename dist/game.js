@@ -290,7 +290,7 @@ function consumeEvents(){
 const net = {
   active: false, client: null, view: new NetView(),
   lane: 2, myId: null, room: null, screen: 'menu', // menu|lobby|race|over
-  lastOver: null, err: '', connectBusy: false, rtt: null,
+  lastOver: null, err: '', connectBusy: false, rtt: null, invited: false,
   cadence: { last: 0, times: [] },
 };
 function netIsHost(){ return !!net.room?.players?.some(p=>p.id===net.myId&&p.host); }
@@ -309,8 +309,8 @@ function netLobbySlots(){
   }
   return html;
 }
-function netOpenMenu(){
-  net.active = true; net.screen = 'menu'; net.err = ''; net.lastOver = null;
+function netOpenMenu(invited = false){
+  net.active = true; net.screen = 'menu'; net.err = ''; net.lastOver = null; net.invited = !!invited;
   net.view = new NetView(); net.cadence = { last: 0, times: [] };
   clearHeld(); overlayKey = ''; lastResults = '';
   renderNetOverlay(); netChrome();
@@ -319,7 +319,7 @@ function netLeave(){
   try{ net.client?.leave(); }catch{}
   try{ net.client?.close(); }catch{}
   net.client = null; net.active = false; net.room = null;
-  net.screen = 'menu'; net.err = ''; net.lastOver = null;
+  net.screen = 'menu'; net.err = ''; net.lastOver = null; net.invited = false;
   quitToTitle();
 }
 async function netShare(){
@@ -477,19 +477,23 @@ function netRenderHud(){
 }
 function renderNetOverlay(){
   const room = net.room;
-  const key = net.screen==='menu' ? `netmenu-${net.err}-${!!net.connectBusy}`
+  const key = net.screen==='menu' ? `netmenu-${net.invited?1:0}-${net.err}-${!!net.connectBusy}`
     : net.screen==='lobby' ? `netlobby-${room?room.code+':'+room.players.map(p=>p.id+p.name+(p.connected?1:0)).join(',')+':'+room.stage:'-'}-${netIsHost()}-${net.err}`
     : net.screen==='race' ? `netrace-${net.view.phase}-${net.view.phase==='countdown'?Math.ceil(net.view.countdown):''}`
     : `netover-${net.lastOver?net.lastOver.standings.map(s=>s.id+s.finishTime).join(','):''}-${netIsHost()}`;
   if(key===overlayKey) return;
   overlayKey = key;
   if(net.screen==='menu'){
+    const invited = net.invited;
     $('overlay').hidden = false;
     $('overlay').innerHTML = `<div class="stage-panel net-menu"><div class="start-kicker">MULTIPLAYER · UP TO 5 PLAYERS</div>
-      <h2 class="stage-name small">RACE <span>FRIENDS</span></h2>
-      <form id="net-form" class="start-form"><input id="net-name" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" enterkeyhint="go" spellcheck="false" value="${escapeHTML(session.playerName||'')}" /><input id="net-host" aria-label="Host address" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${escapeHTML(loadHostUrl())}" /><div class="net-join"><input id="net-code" aria-label="Room code" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" /><button id="net-create" type="submit" class="start-button">Create <span aria-hidden="true">▶</span></button><button id="net-join" type="button" class="secondary-button">Join</button></div>${net.err?`<p class="net-err">${escapeHTML(net.err)}</p>`:''}<button id="net-back" type="button" class="link-button">← Solo tour</button></form></div>`;
-    $('net-form').addEventListener('submit',event=>{event.preventDefault();netConnect(true);});
-    $('net-join').addEventListener('click',()=>netConnect(false));
+      <h2 class="stage-name small">${invited ? 'JOIN <span>ROOM</span>' : 'RACE <span>FRIENDS</span>'}</h2>
+      <form id="net-form" class="start-form"><input id="net-name" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" enterkeyhint="go" spellcheck="false" value="${escapeHTML(session.playerName||'')}" /><input id="net-host" aria-label="Host address" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${escapeHTML(loadHostUrl())}" /><div class="net-join"><input id="net-code" aria-label="Room code" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" />${invited
+        ? `<button id="net-join" type="submit" class="start-button">Join <span aria-hidden="true">▶</span></button>`
+        : `<button id="net-create" type="submit" class="start-button">Create <span aria-hidden="true">▶</span></button><button id="net-join" type="button" class="secondary-button">Join</button>`}</div>${net.err?`<p class="net-err">${escapeHTML(net.err)}</p>`:''}${invited?`<button id="net-uninvite" type="button" class="link-button">or create a new room</button>`:''}<button id="net-back" type="button" class="link-button">← Solo tour</button></form></div>`;
+    $('net-form').addEventListener('submit',event=>{event.preventDefault();netConnect(!net.invited);});
+    if(invited) $('net-uninvite').addEventListener('click',()=>{ net.invited = false; overlayKey = ''; renderNetOverlay(); });
+    else $('net-join').addEventListener('click',()=>netConnect(false));
     $('net-back').addEventListener('click',()=>netLeave());
   }else if(net.screen==='lobby'){
     const host = netIsHost();
@@ -548,7 +552,7 @@ soundUI();renderHud();
   const code = parseInviteCode(window.location?.search);
   if(code.length !== 4) return;
   try{ window.history.replaceState(null, '', window.location.pathname); }catch{}
-  netOpenMenu();
+  netOpenMenu(true);
   const field = $('net-code');
   if(field) field.value = code;
   if((session.playerName || '').trim()) netConnect(false);
