@@ -66,6 +66,10 @@ function pickStage(i){
 let autoTimer=null;
 function clearAuto(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}
 let last=performance.now(),lastHud=0,overlayKey='',feedbackUntil=0,lastResults='',held=new Set(),helpWasRunning=false,helpReturn=null;
+// Long jump holds the pit for 3s after everyone lands so all five marks can
+// be seen before the ranking panel covers the canvas.
+let longjumpResultsAt=0;
+const LONGJUMP_RESULTS_DELAY=3000;
 let soundEnabled=true,audioContext=null;
 try{soundEnabled=localStorage.getItem('track84-sound')!=='off';}catch{}
 function soundUI(){$('sound').innerHTML=svg(soundEnabled?'sound':'mute');$('sound').setAttribute('aria-pressed',String(soundEnabled));$('sound').setAttribute('aria-label',soundEnabled?'Mute sound':'Enable sound');$('sound').title=soundEnabled?'Mute sound':'Enable sound';}
@@ -161,10 +165,13 @@ function formatTime(time){return time.toFixed(2).padStart(5,'0');}
 function renderOverlay(){
   let state=engine.phase;
   // Long jump shows every landing first: keep the pit visible until all five
-  // have landed or fouled, then show the ranking. Other events cut to results
-  // as soon as you finish.
+  // have landed or fouled, hold 3s so the marks can be checked, then rank.
+  // Other events cut to results as soon as you finish.
   if(engine.mode==='longjump'){
-    if(engine.phase==='finished'&&state!=='paused')state='results';
+    if(engine.phase==='finished'&&state!=='paused'){
+      if(!longjumpResultsAt)longjumpResultsAt=performance.now();
+      state=(performance.now()-longjumpResultsAt<LONGJUMP_RESULTS_DELAY)?'racing':'results';
+    }else longjumpResultsAt=0;
   }else if(engine.player.finishTime!==null&&state!=='paused')state='results';
   const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${soloScreen}-${selStage}-${session.event}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
   if(key===overlayKey){if(state==='results')renderResults();return;}
@@ -345,8 +352,10 @@ function renderHud(){
   controls.find(b=>b.dataset.action==='J').classList.toggle('cue',cue);
   if(rowing)$('jump-sub').textContent=p.powerCharges>0?`×${p.powerCharges} LEFT`:'USED';
   const status=$('jump-status');status.classList.toggle('perfect',cue);
+  if(longjump&&engine.phase==='finished'&&!longjumpResultsAt)longjumpResultsAt=performance.now();
   if(engine.phase==='ready')status.textContent=rowing?'L R · ROW WHEN READY':longjump?'L R · GET READY':'L R · GET READY';
   else if(longjump&&p.finishTime!==null&&engine.phase!=='finished')status.textContent=p.foul?'FOUL · WATCH THE OTHERS':`MARK ${p.best.toFixed(2)}m · WATCH THE OTHERS`;
+  else if(longjump&&engine.phase==='finished'&&(performance.now()-longjumpResultsAt<LONGJUMP_RESULTS_DELAY))status.textContent=`ALL LANDED · RESULTS IN ${Math.max(1,Math.ceil((LONGJUMP_RESULTS_DELAY-(performance.now()-longjumpResultsAt))/1000))}`;
   else if(p.finishTime!==null)status.textContent=rowing?'FINISH · GLIDE HOME!':longjump?(p.foul?'FOUL · OVER THE LINE':`MARK ${p.best.toFixed(2)}m`):'FINISH · WELL RUN!';
   else if(engine.phase==='paused')status.textContent='Paused';
   else if(longjump&&p.foul)status.textContent='FOUL · OVER THE LINE';
@@ -397,7 +406,7 @@ function consumeEvents(){
 const net = {
   active: false, client: null, view: new NetView(),
   lane: 2, myId: null, room: null, screen: 'menu', // menu|lobby|race|over
-  lastOver: null, err: '', connectBusy: false, rtt: null, invited: false,
+  lastOver: null, overAt: 0, err: '', connectBusy: false, rtt: null, invited: false,
   cadence: { last: 0, times: [] },
 };
 function netIsHost(){ return !!net.room?.players?.some(p=>p.id===net.myId&&p.host); }
@@ -420,7 +429,7 @@ function netLobbySlots(){
   return html;
 }
 function netOpenMenu(invited = false){
-  net.active = true; net.screen = 'menu'; net.err = ''; net.lastOver = null; net.invited = !!invited;
+  net.active = true; net.screen = 'menu'; net.err = ''; net.lastOver = null; net.overAt = 0; net.invited = !!invited;
   net.view = new NetView(); net.cadence = { last: 0, times: [] };
   clearHeld(); overlayKey = ''; lastResults = '';
   renderNetOverlay(); netChrome();
@@ -430,7 +439,7 @@ function netLeave(){
   try{ net.client?.leave(); }catch{}
   try{ net.client?.close(); }catch{}
   net.client = null; net.active = false; net.room = null;
-  net.screen = 'menu'; net.err = ''; net.lastOver = null; net.invited = false;
+  net.screen = 'menu'; net.err = ''; net.lastOver = null; net.overAt = 0; net.invited = false;
   quitToTitle();
 }
 async function netShare(){
@@ -458,8 +467,8 @@ function attachNetHandlers(client){
   client.on('room', m=>{
     net.room = m; net.err = '';
     if(m.code) saveResume(m.code, session.playerName);
-    if(m.phase==='racing') net.screen = 'race';
-    else if(m.phase==='lobby' && net.screen!=='menu') net.screen = 'lobby';
+    if(m.phase==='racing'){ net.screen = 'race'; net.lastOver = null; net.overAt = 0; }
+    else if(m.phase==='lobby' && net.screen!=='menu'){ net.screen = 'lobby'; net.lastOver = null; net.overAt = 0; }
     overlayKey = '';
   });
   client.on('snap', m=>{
@@ -467,7 +476,15 @@ function attachNetHandlers(client){
     if(net.screen==='lobby') net.screen = 'race';
   });
   client.on('fx', m=>netFx(m.events ?? []));
-  client.on('over', m=>{ net.lastOver = m; net.screen = 'over'; overlayKey = ''; });
+  client.on('over', m=>{
+    // Long jump holds the pit for 3s so all five marks can be seen before
+    // the ranking covers the canvas. Other events cut straight to results.
+    if((m.event ?? net.view.mode) === 'longjump'){
+      net.lastOver = m; net.overAt = performance.now();
+      if(net.screen !== 'race') { net.screen = 'over'; }
+      overlayKey = '';
+    }else{ net.lastOver = m; net.overAt = 0; net.screen = 'over'; overlayKey = ''; }
+  });
   client.on('err', m=>{ net.err = m.msg || 'Error'; if(net.err === 'Room not found') clearResume(); overlayKey = ''; });
   client.on('rtt', ms=>{ net.rtt = ms; const el=$('net-ping'); if(el) el.textContent = `${Math.round(ms)}ms`; });
   client.on('closed', ()=>{
@@ -589,6 +606,11 @@ function netCadence(){
 }
 function netRenderHud(){
   netChrome();
+  // Long jump holds the pit after the final mark: the server announces the
+  // ranking at once, so each client waits 3s on the race view before showing it.
+  if(net.screen==='race'&&net.lastOver&&(net.lastOver.event??net.view.mode)==='longjump'&&net.overAt){
+    if(performance.now()-net.overAt>=LONGJUMP_RESULTS_DELAY){ net.screen='over'; overlayKey=''; }
+  }
   const own = net.view.player;
   const longjump = net.view.mode === 'longjump';
   const rowing = net.view.mode === 'rowing';
@@ -634,6 +656,7 @@ function netRenderHud(){
   if(net.screen==='menu') status.textContent = 'CREATE OR JOIN A ROOM';
   else if(net.screen==='lobby') status.textContent = netIsHost() ? 'PRESS START WHEN READY' : 'Waiting for the host…';
   else if(!own) status.textContent = 'Waiting for the host…';
+  else if(longjump&&net.screen==='race'&&net.lastOver&&net.overAt&&(performance.now()-net.overAt<LONGJUMP_RESULTS_DELAY)) status.textContent = `ALL LANDED · RESULTS IN ${Math.max(1,Math.ceil((LONGJUMP_RESULTS_DELAY-(performance.now()-net.overAt))/1000))}`;
   else if(longjump&&own.finishTime!=null&&net.view.phase!=='finished') status.textContent = own.foul?'FOUL · WATCH THE OTHERS':`MARK ${(own.best||0).toFixed(2)}m · WATCH THE OTHERS`;
   else if(own.finishTime!==null) status.textContent = rowing?'FINISH · GLIDE HOME!':longjump?(own.foul?'FOUL':`MARK ${(own.best||0).toFixed(2)}m`):'FINISH · WELL RUN!';
   else if(net.view.phase==='countdown') status.textContent = 'ON YOUR MARKS…';
@@ -697,11 +720,11 @@ function renderNetOverlay(){
     $('net-leave').addEventListener('click',()=>netLeave());
     $('net-share').addEventListener('click',()=>netShare());
   }else if(net.screen==='race'){
-    $('overlay').hidden = net.view.phase==='racing';
     if(net.view.phase==='countdown'){
+      $('overlay').hidden = false;
       const s = STAGES[net.view.stageIndex] ?? STAGES[0];
       $('overlay').innerHTML = `<div><div class="count-number">${Math.ceil(net.view.countdown)}</div><div class="count-label">${s.year} ${escapeHTML(s.city)} · Get ready to alternate L · R!</div></div>`;
-    }else $('overlay').innerHTML = '';
+    }else{ $('overlay').hidden = true; $('overlay').innerHTML = ''; }
   }else if(net.screen==='over'){
     const over = net.lastOver, host = netIsHost();
     const isLJ = (over?.event ?? net.room?.event ?? net.view.mode) === 'longjump';
