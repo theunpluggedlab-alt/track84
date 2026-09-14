@@ -112,7 +112,13 @@ export class NetView {
   }
   jumpWindow(r) {
     r = r ?? this.player;
-    if (!r || this.mode === 'rowing') return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+    if (!r) return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+    if (this.mode === 'rowing') return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+    if (this.mode === 'longjump') {
+      if (r.jumped || r.foul || r.finishTime != null) return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+      const d = 30 - r.x;
+      return { distance: d, timeTo: d / Math.max(r.speed, 0.1), ideal: d >= 0 && d <= 1.0, near: d >= -0.25 && d <= 3 };
+    }
     const d = (RULES.hurdles[r.hurdleIndex] ?? Infinity) - r.x;
     const timeTo = d / Math.max(r.speed, 0.1);
     return { distance: d, timeTo, ideal: timeTo >= this.idealLo && timeTo <= this.idealHi, near: timeTo >= 0 && timeTo < 0.9 };

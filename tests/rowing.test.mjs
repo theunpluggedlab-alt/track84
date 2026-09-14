@@ -37,7 +37,7 @@ function rowAt(hz, opts = {}) {
 }
 
 test('rowing ships as a second event without disturbing the hurdles', () => {
-  assert.deepEqual(EVENTS.map(e => e.id), ['hurdles', 'rowing']);
+  assert.deepEqual(EVENTS.map(e => e.id), ['hurdles', 'rowing', 'longjump']);
   assert(isEvent('rowing') && !isEvent('marathon'));
   assert.equal(getEvent('rowing').name, '500m Single Sculls');
   assert.equal(distanceFor('rowing'), 500);

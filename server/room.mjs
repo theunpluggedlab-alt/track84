@@ -154,6 +154,9 @@ export class Room {
         // Rowing
         stamina: r.stamina, strokes: r.strokes, crabs: r.crabs, crabRemaining: r.crabRemaining,
         swing: r.swing, powerTen: r.powerTen, powerCharges: r.powerCharges, falseStart: r.falseStart,
+        // Long jump
+        best: r.best, foul: r.foul, jumped: r.jumped, landed: r.landed,
+        takeoffX: r.takeoffX, landingX: r.landingX,
       })),
     };
   }
@@ -199,7 +202,7 @@ export class Room {
     if (this.engine.phase === 'finished' && !this.sentOver) {
       this.sentOver = true;
       this.phase = 'over';
-      const order = this.engine.standings().map(r => ({ id: r.id, lane: r.lane, name: r.name, finishTime: r.finishTime, cleared: r.cleared, falls: r.falls, strokes: r.strokes, crabs: r.crabs }));
+      const order = this.engine.standings().map(r => ({ id: r.id, lane: r.lane, name: r.name, finishTime: r.finishTime, cleared: r.cleared, falls: r.falls, strokes: r.strokes, crabs: r.crabs, best: r.best, foul: r.foul }));
       const msg = { t: 'over', stage: this.stage, event: this.event, standings: order };
       for (const p of this.connected()) this.send(p, msg);
       this.broadcastRoom();

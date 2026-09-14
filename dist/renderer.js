@@ -1,5 +1,5 @@
 import {RULES} from './engine.js';
-import { ROWING } from './events.js';
+import { ROWING, LONGJUMP } from './events.js';
 import { advanceStroke, rowingPose } from './rowing-animation.js';
 import { STAGES } from './stages.js';
 
@@ -36,6 +36,7 @@ export class TrackRenderer {
     // Rowing is a different course on the same stage dressing: bank, water and
     // sculls instead of the tartan track with hurdles.
     if(e?.mode==='rowing'){this.drawRegatta(c,w,h,horizon,stage,e,now);return;}
+    if(e?.mode==='longjump'){this.drawLongJump(c,w,h,horizon,stage,e,now);return;}
     // Lane geometry and actors are functional game graphics, rendered at pixel scale.
     const trackTop=horizon+7, laneH=(h-trackTop-23)/5, skew=18;
     const scale=Math.max(13,Math.min(30,w/32));
@@ -70,6 +71,59 @@ export class TrackRenderer {
     // Subtle scanlines keep the moving image crisp, without obscuring controls.
     c.fillStyle='#070a1214';for(let y=0;y<h;y+=4)c.fillRect(0,y,w,1);
     if(e.phase==='racing'&&e.player.fallRemaining>0){c.fillStyle='#ed755117';c.fillRect(0,0,w,h);}
+  }
+  // ---- Long jump: shared runway look, one board and pit per lane ------------
+  // Same camera rule as hurdles: the view follows your own mark, so rivals
+  // slide in and out at the edges on both solo and multiplayer.
+  drawLongJump(c,w,h,horizon,stage,e,now){
+    const trackTop=horizon+7, laneH=(h-trackTop-23)/5, skew=18;
+    const scale=Math.max(13,Math.min(30,w/32));
+    const anchor=w<600?w*.26:w*.24;
+    const px=e.player?e.player.x:0;
+    this.camera=Math.max(0,px*scale-(anchor-65));
+    const sx=(metres,lane)=>65+metres*scale-this.camera+(2-lane)*9;
+    const sy=(x,lane)=>trackTop+laneH*(lane+.5)-skew*x/w;
+    const board=LONGJUMP.board, foulLine=board+LONGJUMP.foulTol;
+    for(let lane=0;lane<5;lane++){
+      c.fillStyle=lane===2?'#464c3c':lane%2?'#444357':'#4c4a5f';
+      c.beginPath();c.moveTo(0,trackTop+laneH*lane);c.lineTo(w,trackTop+laneH*lane-skew);c.lineTo(w,trackTop+laneH*(lane+1)-skew);c.lineTo(0,trackTop+laneH*(lane+1));c.fill();
+      c.strokeStyle=lane===2?(stage.accent||'#acb880'):'#bcb5ce88';c.lineWidth=lane===2?2:1.4;
+      c.beginPath();c.moveTo(0,trackTop+laneH*lane);c.lineTo(w,trackTop+laneH*lane-skew);c.stroke();
+      c.strokeStyle='#c0bcd523';c.lineWidth=1;
+      for(let m=0;m<=LONGJUMP.runway;m+=2){const x=sx(m,lane);if(x<-10||x>w+10)continue;c.beginPath();c.moveTo(x,sy(x,lane)-laneH*.35);c.lineTo(x-6,sy(x,lane)+laneH*.35);c.stroke();}
+      // Sand pit after the foul line.
+      const pitX0=sx(foulLine,lane), pitX1=sx(Math.min(LONGJUMP.runway,board+12),lane);
+      if(pitX1>-40&&pitX0<w+40){
+        const y0=trackTop+laneH*lane, y1=trackTop+laneH*(lane+1);
+        c.fillStyle='#d9c48f';
+        c.beginPath();c.moveTo(Math.max(0,pitX0),y0-skew*Math.max(0,pitX0)/w);c.lineTo(Math.min(w,pitX1),y0-skew*Math.min(w,pitX1)/w);c.lineTo(Math.min(w,pitX1),y1-skew*Math.min(w,pitX1)/w);c.lineTo(Math.max(0,pitX0),y1-skew*Math.max(0,pitX0)/w);c.closePath();c.fill();
+        c.fillStyle='#b89a5e';
+        for(let m=Math.ceil(foulLine);m<=board+11;m++){const x=sx(m,lane);if(x<-10||x>w+10)continue;c.fillRect(x,sy(x,lane)-laneH*.35,1,laneH*.7);}
+      }
+      const r=e.runners[lane];
+      const bx=sx(board,lane), fx=sx(foulLine,lane);
+      if(bx>-30&&bx<w+30){
+        c.fillStyle='#e4dfed';c.fillRect(Math.round(bx),sy(bx,lane)-laneH/2,3,laneH);
+        c.fillStyle='#c0392b';c.fillRect(Math.round(fx),sy(fx,lane)-laneH/2,2,laneH);
+      }
+      if(r){
+        if(r.landed){
+          const lx=sx(r.landingX,lane);
+          if(lx>-20&&lx<w+20){c.fillStyle='#ffffff';c.fillRect(Math.round(lx)-2,sy(lx,lane)+laneH*.18,5,3);}
+        }
+        if(r.foul){
+          const mx=sx(Math.min(r.x,board+1),lane);
+          if(mx>-30&&mx<w+30){c.fillStyle='#ff6b6b';c.font=`bold ${Math.max(11,laneH*.32)}px monospace`;c.fillText('FOUL',mx-14,sy(mx,lane)-laneH*.3);}
+        }
+        const x=sx(r.x,lane),y=sy(x,lane)+laneH*.21;
+        if(x>-50&&x<w+50)this.runner(x,y,r,e,laneH,now);
+      }
+    }
+    c.fillStyle='#25283a';c.fillRect(0,h-21,w,21);c.fillStyle='#b1b3c0';c.font='10px monospace';
+    const base=Math.floor(px/5)*5;
+    for(let m=Math.max(0,base-10);m<=Math.min(LONGJUMP.runway,base+30);m+=5){const x=sx(m,4);if(x<0||x>w)continue;c.fillRect(x,h-20,1,5);c.fillText(`${m}m`,x+5,h-7);}
+    c.fillStyle='#070a1214';for(let y=0;y<h;y+=4)c.fillRect(0,y,w,1);
+    if(e.phase==='racing'&&e.player&&e.player.foul){c.fillStyle='#ed755117';c.fillRect(0,0,w,h);}
   }
   drawSky(c,w,horizon,stage){
     const g=c.createLinearGradient(0,0,0,horizon+12);

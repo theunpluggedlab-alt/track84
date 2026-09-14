@@ -1,6 +1,6 @@
 // Rendering-independent fixed-step simulation. Distances are metres, times seconds.
 import { difficultyFor, STAGES } from './stages.js';
-import { ROWING, isEvent } from './events.js';
+import { ROWING, LONGJUMP, isEvent } from './events.js';
 export const RULES = Object.freeze({ distance: 110, hurdles: Array.from({length:10},(_,i)=>13.72+i*9.14), step: 1/120, maxSpeed: 10.6, jumpDuration: .78, jumpHeight: 1.38, clearance: .91, fallDuration: .95 });
 export const COLORS = ['#ff936a','#9a90ff','#d5ff64','#63d8ed','#ed87c8'];
 export const PLAYER_ID = 'runner-2';
@@ -9,12 +9,12 @@ const DEFAULT_PACE = [5.3,6.1,0,5.7,6.6];
 
 export class RaceEngine {
   constructor(seed = 84) { this.stageIndex=0; this.mode='hurdles'; this.applyDifficulty(null, true); this.reset(seed); }
-  // Event selection: 'hurdles' (110m, the original arcade race) or 'rowing'
-  // (500m single sculls). The rules of the chosen event drive distance, speed
+  // Event selection: 'hurdles' (110m), 'rowing' (500m) or 'longjump'.
+  // The rules of the chosen event drive distance, speed
   // and the meaning of J, so hosts and clients stay on one shared engine.
   setEvent(id) { this.mode = isEvent(id) ? id : 'hurdles'; return this.mode; }
-  get distance() { return this.mode === 'rowing' ? ROWING.distance : RULES.distance; }
-  get rules() { return this.mode === 'rowing' ? ROWING : RULES; }
+  get distance() { return this.mode === 'rowing' ? ROWING.distance : this.mode === 'longjump' ? LONGJUMP.runway : RULES.distance; }
+  get rules() { return this.mode === 'rowing' ? ROWING : this.mode === 'longjump' ? LONGJUMP : RULES; }
   setStage(index) {
     const i = STAGES.length ? Math.min(STAGES.length-1, Math.max(0, index|0)) : 0;
     this.stageIndex = i;
@@ -37,7 +37,7 @@ export class RaceEngine {
     this.events=[]; this.resumePhase='racing';
     // Solo default keeps lane 3 (runner-2) human; net hosts pass joined lanes.
     const humans = humanIds ?? ['runner-2'];
-    this.runners=COLORS.map((color,i)=>({ id:`runner-${i}`,lane:i,name:i===2?'YOU':`CPU ${i<2?i+1:i}`,color,human:humans.includes(`runner-${i}`),x:0,speed:0,lastLeg:null,lastStep:-10,intervals:[],cadence:0,jumpAge:null,fallRemaining:0,falls:0,cleared:0,hurdleIndex:0,hurdleResults:[],finishTime:null,nextAITap:0,nextAIJump:null,aiLeg:'L',aiPace:(this.aiPaceBase??DEFAULT_PACE)[i],stamina:1,strokes:0,crabs:0,crabRemaining:0,swing:false,powerTen:0,powerCharges:ROWING.powerCharges,falseStart:false,repeats:0,aiRepeat:0 }));
+    this.runners=COLORS.map((color,i)=>({ id:`runner-${i}`,lane:i,name:i===2?'YOU':`CPU ${i<2?i+1:i}`,color,human:humans.includes(`runner-${i}`),x:0,speed:0,lastLeg:null,lastStep:-10,intervals:[],cadence:0,jumpAge:null,fallRemaining:0,falls:0,cleared:0,hurdleIndex:0,hurdleResults:[],finishTime:null,nextAITap:0,nextAIJump:null,aiLeg:'L',aiPace:(this.aiPaceBase??DEFAULT_PACE)[i],stamina:1,strokes:0,crabs:0,crabRemaining:0,swing:false,powerTen:0,powerCharges:ROWING.powerCharges,falseStart:false,repeats:0,aiRepeat:0,best:0,foul:false,jumped:false,landed:false,takeoffX:0,takeoffVx:0,flightDur:0,landingX:0 }));
   }
   random() { this.seed=(Math.imul(1664525,this.seed)+1013904223)>>>0; return this.seed/4294967296; }
   setHuman(id, human) {
@@ -63,7 +63,12 @@ export class RaceEngine {
     }
     const r=this.runners.find(v=>v.id===command.playerId);
     if(!r||r.finishTime!==null||r.fallRemaining>0||r.crabRemaining>0) return false;
-    if(command.action==='J') return this.mode==='rowing' ? this.powerTen(r) : this.jump(r);
+    if(r.jumped||r.foul||r.landed) return false;
+    if(command.action==='J') {
+      if(this.mode==='rowing') return this.powerTen(r);
+      if(this.mode==='longjump') return this.takeoff(r);
+      return this.jump(r);
+    }
     if(command.action!=='L'&&command.action!=='R') return false;
     if(r.lastLeg===command.action) {
       // Rowing: a stuck oar. Three same-side strokes in a row catch a crab.
@@ -141,8 +146,77 @@ export class RaceEngine {
     if(r.jumpAge!==null||r.speed<1.3)return false;
     r.jumpAge=0;this.emit('jump',r);return true;
   }
+  // ---- Long jump ----------------------------------------------------------
+  // One run-up, one take off. L/R builds speed like hurdles. J in the board
+  // zone starts flight. Overstep is a foul. No jump past the line is a foul.
+  // Flight is deterministic so hosts and clients agree on the mark.
+  takeoff(r) {
+    if(r.jumped||r.foul||r.finishTime!==null||r.jumpAge!==null) return false;
+    if(r.speed<LONGJUMP.minJumpSpeed) return false;
+    const over = r.x - LONGJUMP.board;
+    if(over > LONGJUMP.foulTol) { this.foulJump(r); return false; }
+    if(over < -LONGJUMP.earlyLimit) return false;
+    const closeness = clamp(1 - Math.abs(over) / 2, 0, 1);
+    const vy = LONGJUMP.baseVy + r.speed * LONGJUMP.vyPerSpeed + closeness * LONGJUMP.perfectBonus;
+    const flight = (2 * vy) / LONGJUMP.gravity;
+    r.jumped = true;
+    r.jumpAge = 0;
+    r.takeoffX = r.x;
+    r.takeoffVx = r.speed;
+    r.flightDur = flight;
+    r.landingX = r.takeoffX + r.takeoffVx * flight;
+    this.emit('jump', r, { takeoff: r.takeoffX });
+    return true;
+  }
+  foulJump(r) {
+    if(r.foul||r.finishTime!==null) return false;
+    r.foul = true;
+    r.best = 0;
+    r.speed = 0;
+    r.cadence = 0;
+    r.jumpAge = null;
+    r.finishTime = this.time;
+    this.emit('foul', r);
+    this.emit('finish', r);
+    return true;
+  }
+  stepLongJumper(r, dt) {
+    if(r.finishTime!==null) return;
+    if(r.jumped) {
+      r.jumpAge += dt;
+      r.x += r.takeoffVx * dt;
+      if(r.jumpAge >= r.flightDur) {
+        r.x = r.landingX;
+        r.landed = true;
+        r.best = clamp(r.landingX - LONGJUMP.board, 0, LONGJUMP.maxBest);
+        r.speed = 0;
+        r.cadence = 0;
+        r.jumpAge = null;
+        r.finishTime = this.time;
+        this.emit('land', r, { best: r.best });
+        this.emit('finish', r);
+      }
+      return;
+    }
+    if(r.foul) return;
+    const idle = this.time - r.lastStep;
+    r.speed = Math.max(0, r.speed - dt * (idle > .32 ? 5.2 : 1.55));
+    if(idle > .8) r.cadence = 0;
+    r.x += r.speed * dt;
+    if(r.x > LONGJUMP.board + LONGJUMP.foulTol) {
+      this.foulJump(r);
+    }
+  }
   heightAt(age){return age===null||age<0||age>RULES.jumpDuration?0:Math.sin(age/RULES.jumpDuration*Math.PI)*RULES.jumpHeight;}
   jumpWindow(r=this.player){
+    if(this.mode==='longjump') {
+      if(!r||r.jumped||r.foul||r.finishTime!==null) return { distance: Infinity, timeTo: Infinity, ideal: false, near: false };
+      const d = LONGJUMP.board - r.x;
+      const timeTo = d / Math.max(r.speed, .1);
+      const ideal = d >= 0 && d <= 1.0;
+      const near = d >= -LONGJUMP.foulTol && d <= 3;
+      return { distance: d, timeTo, ideal, near };
+    }
     const d=(RULES.hurdles[r.hurdleIndex]??Infinity)-r.x;
     const timeTo=d/Math.max(r.speed,.1);
     const lo=this.idealLo??0.24, hi=this.idealHi??0.49;
@@ -170,6 +244,16 @@ export class RaceEngine {
       if(r.powerTen<=0&&r.powerCharges>0&&r.x>ROWING.distance*.68&&this.random()<dt*.35) this.powerTen(r);
       return;
     }
+    if(this.mode==='longjump') {
+      if(r.jumped||r.foul) return;
+      if(r.nextAIJump===null){
+        const spread=this.aiSpread??0.19, mistake=this.aiMistake??0.12;
+        r.nextAIJump=0.35+(this.random()-.5)*spread*2+(this.random()<mistake*0.25?-0.6:0);
+      }
+      const w=this.jumpWindow(r);
+      if(!r.jumped&&r.jumpAge===null&&w.distance<=r.nextAIJump&&w.distance>-LONGJUMP.foulTol&&r.speed>2){this.takeoff(r);}
+      return;
+    }
     if(r.nextAIJump===null){
       const spread=this.aiSpread??0.19, mistake=this.aiMistake??0.12;
       r.nextAIJump=.34+(this.random()-.5)*spread+(this.random()<mistake?.31:0);
@@ -177,7 +261,7 @@ export class RaceEngine {
     const w=this.jumpWindow(r);
     if(r.jumpAge===null&&w.timeTo<r.nextAIJump&&w.distance>0&&r.speed>2){this.jump(r);}
   }
-  finishLine(){return this.mode==='rowing'?ROWING.distance:RULES.distance;}
+  finishLine(){return this.mode==='rowing'?ROWING.distance:this.mode==='longjump'?LONGJUMP.runway:RULES.distance;}
   step(dt=RULES.step) {
     if(this.phase==='countdown') {
       const prev=Math.ceil(this.countdown);this.countdown-=dt;
@@ -191,6 +275,7 @@ export class RaceEngine {
       if(r.finishTime!==null)continue;
       if(!r.human)this.updateAI(r,dt);
       if(this.mode==='rowing'){this.stepRower(r,dt);continue;}
+      if(this.mode==='longjump'){this.stepLongJumper(r,dt);continue;}
       if(r.fallRemaining>0){r.fallRemaining=Math.max(0,r.fallRemaining-dt);r.speed*=Math.exp(-dt*1.2);}
       else {
         const idle=this.time-r.lastStep;
@@ -218,7 +303,20 @@ export class RaceEngine {
     }
     if(this.runners.every(r=>r.finishTime!==null)){this.phase='finished';this.emit('complete');}
   }
-  standings(){return [...this.runners].sort((a,b)=>a.finishTime!==null&&b.finishTime!==null?a.finishTime-b.finishTime:a.finishTime!==null?-1:b.finishTime!==null?1:b.x-a.x||a.lane-b.lane);}
+  standings(){
+    if(this.mode==='longjump') {
+      return [...this.runners].sort((a,b)=>{
+        const af=a.foul?1:0, bf=b.foul?1:0;
+        if(af!==bf) return af-bf;
+        if(!af&&!bf&&a.best!==b.best) return b.best-a.best;
+        if(a.finishTime!==null&&b.finishTime!==null) return a.finishTime-b.finishTime;
+        if(a.finishTime!==null) return -1;
+        if(b.finishTime!==null) return 1;
+        return b.x-a.x||a.lane-b.lane;
+      });
+    }
+    return [...this.runners].sort((a,b)=>a.finishTime!==null&&b.finishTime!==null?a.finishTime-b.finishTime:a.finishTime!==null?-1:b.finishTime!==null?1:b.x-a.x||a.lane-b.lane);
+  }
   snapshot(){return structuredClone({protocol:1,mode:this.mode,seed:this.seed,tick:this.tick,time:this.time,phase:this.phase,countdown:this.countdown,resumePhase:this.resumePhase,runners:this.runners,stageIndex:this.stageIndex,aiPaceBase:this.aiPaceBase,aiJitter:this.aiJitter,aiMistake:this.aiMistake,aiSpread:this.aiSpread,clearance:this.clearance,idealLo:this.idealLo,idealHi:this.idealHi});}
   restore(snapshot){if(snapshot.protocol!==1)throw new Error('Unsupported race protocol');for(const key of ['seed','tick','time','phase','countdown','resumePhase','runners'])this[key]=structuredClone(snapshot[key]);for(const key of ['mode','stageIndex','aiPaceBase','aiJitter','aiMistake','aiSpread','clearance','idealLo','idealHi'])if(snapshot[key]!==undefined)this[key]=structuredClone(snapshot[key]);this.events=[];}
 }

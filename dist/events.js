@@ -21,14 +21,27 @@ export const EVENTS = [
     id: 'rowing',
     name: '500m Single Sculls',
     icon: '🚣',
-    blurb: 'Row 500m · rhythm + sprint ×2',
+    blurb: 'Row 500m · rhythm + sprint x2',
     caption: 'STROKES',
     meta: '500m SPRINT',
     venueLabel: 'Olympic Regatta Course',
     action: 'SPRINT',
-    actionSub: '×2',
-    hint: 'L ↔ R alternate oars / J sprint — twice a race',
+    actionSub: 'x2',
+    hint: 'L R alternate oars / J sprint — twice a race',
     running: false,
+  },
+  {
+    id: 'longjump',
+    name: 'Long Jump',
+    icon: '🦘',
+    blurb: 'Run 30m · hit the board · fly',
+    caption: 'JUMP',
+    meta: '1 JUMP',
+    venueLabel: '',
+    action: 'JUMP',
+    actionSub: 'TAKE OFF',
+    hint: 'L R alternate to run / J take off at the board',
+    running: true,
   },
 ];
 
@@ -38,6 +51,22 @@ export function isEvent(id) { return EVENTS.some(e => e.id === id); }
 export function getEvent(id) { return EVENTS.find(e => e.id === id) ?? EVENTS[0]; }
 export function eventIds() { return EVENTS.map(e => e.id); }
 
+// Long jump tuning: 30m run-up, one take off at the board, sand pit after.
+// Same L/R run model as hurdles. Take off close to the foul line for a long
+// mark, overstep for a foul. One attempt per race so 5 lanes stay in sync.
+export const LONGJUMP = Object.freeze({
+  runway: 45,
+  board: 30,
+  foulTol: 0.25,
+  earlyLimit: 8,
+  maxSpeed: 10.6,
+  minJumpSpeed: 1.3,
+  gravity: 9.8,
+  baseVy: 2.6,
+  vyPerSpeed: 0.14,
+  perfectBonus: 0.35,
+  maxBest: 9.5,
+});
 // Rowing tuning: 500m sprint on flat water. Strokes build hull speed exactly
 // like running builds cadence, but the boat rewards rhythm and punishes a
 // smashed rating: steady strokes ride clean water ("swing"), while rowing above
@@ -73,5 +102,7 @@ export const ROWING = Object.freeze({
 });
 
 export function distanceFor(eventId) {
-  return eventId === 'rowing' ? ROWING.distance : 110;
+  if (eventId === 'rowing') return ROWING.distance;
+  if (eventId === 'longjump') return LONGJUMP.runway;
+  return 110;
 }
