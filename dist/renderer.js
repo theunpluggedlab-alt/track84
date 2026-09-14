@@ -337,7 +337,7 @@ export class TrackRenderer {
     const pivot = -len * .06;
     const tipX = pivot + len * .5 + sweep;
     const grip = pivot - sweep * .45 + lean * .3;
-    const foam = (n) => ((r.strokes * 53 + lane * 17 + n * 29) % 5) - 2;
+    const foam = (n) => ((r.strokes * 53 + r.lane * 17 + n * 29) % 5) - 2;
     const splash = moving && phase < .16;
     const blade = (by, far) => {
       rect(tipX - p * .9, by - p * .5, p * 3.2, p * (drive ? 1.8 : 1.2), far ? '#cfd6e6' : '#e9edf7');

@@ -42,8 +42,10 @@ const controls=[...document.querySelectorAll('[data-action]')];
 // highest unlocked stage. Top-3 finishes still auto-advance.
 let selStage=Math.min(STAGES.length-1,Math.max(0,session.unlocked));
 session.setStage(selStage);
-// Discipline: 110m hurdles or 500m single sculls. The engine, the renderer and
-// the multiplayer room all read this one field, so every mode stays in step.
+// Solo title flow: event select first, then the stage card.
+// Picking an event advances to the stage screen; single (Start) and
+// multiplayer branch from there.
+let soloScreen='event';
 function evInfo(){return getEvent(session.event);}
 function isRowing(){return session.event==='rowing';}
 function pickEvent(id){
@@ -51,9 +53,10 @@ function pickEvent(id){
   session.setEvent(id);
   engine.reset(84+(selStage*17));
   if(session.playerName)engine.player.name=session.playerName;
-  clearAuto();overlayKey='';lastResults='';renderHud();
+  clearAuto();overlayKey='';lastResults='';soloScreen='stage';renderHud();
   showFeedback(getEvent(id).name.toUpperCase(),false,1400);
 }
+function backToEvents(){soloScreen='event';overlayKey='';lastResults='';renderHud();}
 function pickStage(i){
   selStage=Math.min(STAGES.length-1,Math.max(0,i|0));
   session.setStage(selStage);
@@ -79,7 +82,7 @@ function quitToTitle(){
   engine.setEvent(session.event);
   engine.reset(84+(selStage*17));
   if(session.playerName)engine.player.name=session.playerName;
-  overlayKey='';lastResults='';renderHud();
+  overlayKey='';lastResults='';soloScreen='event';renderHud();
 }
 function begin(){
   const input=$('player-name');
@@ -98,7 +101,7 @@ function newGameFlow(){
   // Arcade reset anytime: 3 lives, tour back to Athens, name re-entry.
   clearAuto();session.newGame();selStage=0;
   session.setStage(0);engine.setEvent(session.event);engine.reset(84);engine.player.name='YOU';
-  overlayKey='';lastResults='';renderHud();
+  overlayKey='';lastResults='';soloScreen='event';renderHud();
 }
 function changeName(){session.playerName='';session.saveCareer();overlayKey='';renderHud();setTimeout(()=>$('player-name')?.focus(),50);}
 function pauseRace(){engine.pause();clearHeld();renderOverlay();}
@@ -157,24 +160,36 @@ function formatTime(time){return time.toFixed(2).padStart(5,'0');}
 function renderOverlay(){
   let state=engine.phase;
   if(engine.player.finishTime!==null&&state!=='paused')state='results';
-  const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${selStage}-${session.event}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
+  const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${soloScreen}-${selStage}-${session.event}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
   if(key===overlayKey){if(state==='results')renderResults();return;}
   overlayKey=key;$('overlay').hidden=state==='racing';
+  if(state==='ready'&&soloScreen==='event'){
+    // Step 1: pick the discipline. Tapping a card selects it and advances
+    // to the stage screen, where single (Start) and multiplayer branch off.
+    $('overlay').hidden=false;
+    $('overlay').innerHTML=`<div class="stage-panel"><div class="start-kicker">OLYMPIC EVENTS · PICK YOUR GAME</div>
+      <h2 class="stage-name">CHOOSE <span>EVENT</span></h2>
+      <div class="event-picker big" role="group" aria-label="Choose event">${EVENTS.map(e=>`<button type="button" class="event-card${e.id===session.event?' sel':''}" data-event="${e.id}" aria-pressed="${e.id===session.event}"><span class="event-icon" aria-hidden="true">${e.icon}</span><span class="event-name">${escapeHTML(e.name)}</span><span class="event-blurb">${escapeHTML(e.blurb)}</span></button>`).join('')}</div>
+      <p class="stage-place">Single tour or multiplayer — next step</p></div>`;
+    [...$('overlay').querySelectorAll('.event-card')].forEach(b=>b.addEventListener('click',()=>pickEvent(b.dataset.event)));
+    return;
+  }
   if(state==='ready'){
-    // No-scroll stage card: any of the 30 Games, name inline, one tap to run.
+    // Step 2: stage card — name inline, one tap to run, or multiplayer.
     const i=selStage, s=STAGES[i], d=difficultyFor(i);
     const hasName=!!(session.playerName||'').trim();
     const options=STAGES.map((o,k)=>`<option value="${k}"${k===i?' selected':''}>${o.year} ${escapeHTML(o.city)} · ${escapeHTML(o.country)}</option>`).join('');
-    $('overlay').innerHTML=`<div class="stage-panel"><div class="event-picker" role="group" aria-label="Choose event">${EVENTS.map(e=>`<button type="button" class="event-card${e.id===session.event?' sel':''}" data-event="${e.id}" aria-pressed="${e.id===session.event}"><span class="event-icon" aria-hidden="true">${e.icon}</span><span class="event-name">${escapeHTML(e.name)}</span><span class="event-blurb">${escapeHTML(e.blurb)}</span></button>`).join('')}</div><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
+    $('overlay').innerHTML=`<div class="stage-panel"><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
       <h2 class="stage-name">${s.year} <span>${escapeHTML(s.city).toUpperCase()}</span></h2>
       <p class="stage-place">${escapeHTML(s.stadium)} · ${escapeHTML(s.country)} · ${stars(d.stars)}</p>
       <select id="stage-select" class="stage-select" aria-label="Choose Games">${options}</select>
       ${hasName
-        ? `<button id="start-race" class="start-button big">Start ${s.year} ${escapeHTML(s.city)} <span aria-hidden="true">▶</span></button><button id="change-name" class="link-button">${escapeHTML(session.playerName)} · change name</button><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`
-        : `<form id="start-form" class="start-form inline"><input id="player-name" name="playerName" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" autocapitalize="words" enterkeyhint="go" spellcheck="false" required /><button id="start-race" type="submit" class="start-button" disabled>Start <span aria-hidden="true">▶</span></button></form><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`}</div>`;
+        ? `<button id="start-race" class="start-button big">Start ${s.year} ${escapeHTML(s.city)} <span aria-hidden="true">▶</span></button><button id="change-name" class="link-button">${escapeHTML(session.playerName)} · change name</button><button id="back-events" class="link-button">← Events</button><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`
+        : `<form id="start-form" class="start-form inline"><input id="player-name" name="playerName" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" autocapitalize="words" enterkeyhint="go" spellcheck="false" required /><button id="start-race" type="submit" class="start-button" disabled>Start <span aria-hidden="true">▶</span></button></form><button id="back-events" class="link-button">← Events</button><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`}</div>`;
     $('prev-stage').addEventListener('click',()=>pickStage(selStage-1));
     $('next-stage-pick').addEventListener('click',()=>pickStage(selStage+1));
-    [...$('overlay').querySelectorAll('.event-card')].forEach(b=>b.addEventListener('click',()=>pickEvent(b.dataset.event)));
+    $('stage-select').addEventListener('change',event=>pickStage(Number(event.target.value)));
+    $('back-events').addEventListener('click',()=>backToEvents());
     $('stage-select').addEventListener('change',event=>pickStage(Number(event.target.value)));
     $('open-net').addEventListener('click',()=>{unlockAudio();netOpenMenu();});
     if(hasName){

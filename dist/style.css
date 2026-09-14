@@ -267,6 +267,12 @@ body{touch-action:manipulation;overscroll-behavior-y:none;min-height:100dvh}
 .event-name{font-size:12px;font-weight:800;white-space:nowrap}
 .event-blurb{font-size:10px;color:#9aa0b6;line-height:1.4}
 .event-card[aria-pressed="true"] .event-blurb{color:#3c4a22}
+/* Step-1 event select: big visual cards; extra events wrap to more rows. */
+.event-picker.big{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:420px;margin-bottom:10px}
+.event-picker.big .event-card{padding:16px 8px}
+.event-picker.big .event-icon{font-size:40px}
+.event-picker.big .event-name{font-size:14px}
+.event-picker.big .event-blurb{font-size:11px}
 /* On the water the race-strip pips are the crew's stamina, so the last lit pip
    is the warning light rather than the next hurdle. */
 .hurdle-pips[aria-label^="Stamina"] i.next{background:#ffc46a;border-color:#ffc46a}
