@@ -6,6 +6,8 @@ export const EVENTS = [
   {
     id: 'hurdles',
     name: '110m Hurdles',
+    icon: '🏃',
+    blurb: 'Sprint 110m · clear 10 hurdles',
     caption: 'HURDLES',
     meta: '10 HURDLES',
     // The stage's real stadium name is used for the track event.
@@ -18,12 +20,14 @@ export const EVENTS = [
   {
     id: 'rowing',
     name: '500m Single Sculls',
+    icon: '🚣',
+    blurb: 'Row 500m · rhythm + sprint ×2',
     caption: 'STROKES',
     meta: '500m SPRINT',
     venueLabel: 'Olympic Regatta Course',
-    action: 'POWER',
-    actionSub: 'TEN',
-    hint: 'L ↔ R alternate oars / J call a power ten',
+    action: 'SPRINT',
+    actionSub: '×2',
+    hint: 'L ↔ R alternate oars / J sprint — twice a race',
     running: false,
   },
 ];

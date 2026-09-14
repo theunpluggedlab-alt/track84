@@ -32,7 +32,7 @@ document.querySelector('#app').innerHTML=`
   </section>
   <section class="control-deck" aria-label="Race controls"><div><div class="controls"><div class="leg-group"><button class="play-button" data-action="L" aria-label="L left leg"><span class="key-tag">A / ←</span><span class="letter">L</span><span class="button-label"><strong id="leg-l-label">LEFT LEG</strong><span id="leg-l-sub">ALTERNATE</span></span></button><button class="play-button" data-action="R" aria-label="R right leg"><span class="key-tag">D / →</span><span class="letter">R</span><span class="button-label"><strong id="leg-r-label">RIGHT LEG</strong><span id="leg-r-sub">TO RUN</span></span></button></div><button class="play-button jump" data-action="J" aria-label="J jump"><span class="key-tag">SPACE</span><span class="letter">J</span><span class="button-label"><strong id="jump-label">JUMP</strong><span id="jump-sub">CLEAR IT</span></span></button></div><div class="controls-hint" id="controls-hint"><b>L ↔ R</b> alternate to run <span class="divider">/</span> <b>J</b> time your jump</div></div><aside class="rhythm-panel" aria-label="Current running rhythm"><div class="rhythm-heading"><span id="rhythm-title">YOUR RHYTHM</span> <span id="cadence">0.0 /s</span></div><div class="rhythm-bars" id="rhythm-bars" aria-hidden="true">${'<i></i>'.repeat(20)}</div><p id="rhythm-copy">Quicker taps. <strong>Faster feet.</strong><br/>Jump when the J button lights up.</p></aside></section>
   <footer class="bottom-bar"><div class="opponents" id="opponents"></div><div class="footer-note"><span id="career-note">ROAD TO PARIS 2024</span><span>TOUCH & KEYBOARD</span></div></footer>
-</main><div id="help-dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden><div class="dialog-card"><button id="close-help" class="icon-button close-dialog" aria-label="Close instructions">${svg('close')}</button><h2 id="help-title">READY TO RUN?</h2><ol><li>You are the <strong>lime green athlete</strong> in lane 3. Race four computer rivals over the distance.</li><li>Alternate <strong>L · R</strong> to run. Tap faster to build speed. Repeating the same leg will not accelerate you.</li><li>Press <strong>J when it lights up</strong> as a hurdle approaches. Jump too early or too late and you will trip.</li><li>Took a tumble? Get back up, then alternate L · R to find your rhythm again.</li><li><strong>500m Single Sculls (rowing):</strong> the same L · R alternation drives the boat. Hold a steady rhythm near 6–7 strokes a second for clean water (<strong>SWING</strong>); smash the rating and you burn out your crew. Three same-side strokes in a row and you catch a <strong>crab</strong>. Press <strong>J</strong> for a power ten — twice a race. Stroking before the gun is a false start.</li><li>Arcade rules: you have <strong>3 lives</strong>. Finish outside the <strong>top 3</strong> and you lose one — lose all 3 and it is <strong>game over</strong>. Top-3 finishes advance automatically. Pause anytime to reset with a fresh name.</li></ol><div class="help-foot">Keys: L / A / ← · R / D / → · J / Space / ↑<br/>P or Esc: pause · Enter: start<br/>Rotate your phone to play in portrait or landscape.</div><div class="help-foot"><button id="leave-net" class="secondary-button danger" hidden>Leave multiplayer race</button></div></div></div><div class="sr-only" aria-live="polite" id="announcer"></div>`;
+</main><div id="help-dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden><div class="dialog-card"><button id="close-help" class="icon-button close-dialog" aria-label="Close instructions">${svg('close')}</button><h2 id="help-title">READY TO RUN?</h2><ol><li>You are the <strong>lime green athlete</strong> in lane 3. Race four computer rivals over the distance.</li><li>Alternate <strong>L · R</strong> to run. Tap faster to build speed. Repeating the same leg will not accelerate you.</li><li>Press <strong>J when it lights up</strong> as a hurdle approaches. Jump too early or too late and you will trip.</li><li>Took a tumble? Get back up, then alternate L · R to find your rhythm again.</li><li><strong>500m Single Sculls (rowing):</strong> the same L · R alternation drives the boat. Hold a steady rhythm near 6–7 strokes a second for clean water (<strong>SWING</strong>); smash the rating and you burn out your crew. Three same-side strokes in a row and you catch a <strong>crab</strong>. Press <strong>J</strong> to sprint — twice a race. Stroking before the gun is a false start.</li><li>Arcade rules: you have <strong>3 lives</strong>. Finish outside the <strong>top 3</strong> and you lose one — lose all 3 and it is <strong>game over</strong>. Top-3 finishes advance automatically. Pause anytime to reset with a fresh name.</li></ol><div class="help-foot">Keys: L / A / ← · R / D / → · J / Space / ↑<br/>P or Esc: pause · Enter: start<br/>Rotate your phone to play in portrait or landscape.</div><div class="help-foot"><button id="leave-net" class="secondary-button danger" hidden>Leave multiplayer race</button></div></div></div><div class="sr-only" aria-live="polite" id="announcer"></div>`;
 
 const $=(id)=>document.getElementById(id);
 const session=new RaceSession();const engine=session.engine;
@@ -165,7 +165,7 @@ function renderOverlay(){
     const i=selStage, s=STAGES[i], d=difficultyFor(i);
     const hasName=!!(session.playerName||'').trim();
     const options=STAGES.map((o,k)=>`<option value="${k}"${k===i?' selected':''}>${o.year} ${escapeHTML(o.city)} · ${escapeHTML(o.country)}</option>`).join('');
-    $('overlay').innerHTML=`<div class="stage-panel"><div class="event-picker" role="group" aria-label="Choose event">${EVENTS.map(e=>`<button type="button" class="event-option" data-event="${e.id}" aria-pressed="${e.id===session.event}">${escapeHTML(e.name)}</button>`).join('')}</div><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
+    $('overlay').innerHTML=`<div class="stage-panel"><div class="event-picker" role="group" aria-label="Choose event">${EVENTS.map(e=>`<button type="button" class="event-card${e.id===session.event?' sel':''}" data-event="${e.id}" aria-pressed="${e.id===session.event}"><span class="event-icon" aria-hidden="true">${e.icon}</span><span class="event-name">${escapeHTML(e.name)}</span><span class="event-blurb">${escapeHTML(e.blurb)}</span></button>`).join('')}</div><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
       <h2 class="stage-name">${s.year} <span>${escapeHTML(s.city).toUpperCase()}</span></h2>
       <p class="stage-place">${escapeHTML(s.stadium)} · ${escapeHTML(s.country)} · ${stars(d.stars)}</p>
       <select id="stage-select" class="stage-select" aria-label="Choose Games">${options}</select>
@@ -174,7 +174,7 @@ function renderOverlay(){
         : `<form id="start-form" class="start-form inline"><input id="player-name" name="playerName" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" autocapitalize="words" enterkeyhint="go" spellcheck="false" required /><button id="start-race" type="submit" class="start-button" disabled>Start <span aria-hidden="true">▶</span></button></form><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`}</div>`;
     $('prev-stage').addEventListener('click',()=>pickStage(selStage-1));
     $('next-stage-pick').addEventListener('click',()=>pickStage(selStage+1));
-    [...$('overlay').querySelectorAll('.event-option')].forEach(b=>b.addEventListener('click',()=>pickEvent(b.dataset.event)));
+    [...$('overlay').querySelectorAll('.event-card')].forEach(b=>b.addEventListener('click',()=>pickEvent(b.dataset.event)));
     $('stage-select').addEventListener('change',event=>pickStage(Number(event.target.value)));
     $('open-net').addEventListener('click',()=>{unlockAudio();netOpenMenu();});
     if(hasName){
@@ -256,7 +256,7 @@ function refreshStageChrome(){
   $('stage-stars').textContent=`${stars(d.stars)} ${d.label}`;
   $('arena-location').textContent=`${s.year} ${s.city.toUpperCase()} • ${venue.toUpperCase().slice(0,26)}`;
   // Chrome that changes meaning with the discipline (J is a jump on land and a
-  // power-ten call on the water), all driven from the event registry.
+  // sprint call on the water), all driven from the event registry.
   $('meta-count').textContent=ev.meta.split(' ')[0];
   $('meta-label').textContent=ev.meta.split(' ').slice(1).join(' ');
   $('distance-max').textContent=`/${engine.distance}m`;
@@ -264,11 +264,11 @@ function refreshStageChrome(){
   $('jump-label').textContent=ev.action;
   $('jump-sub').textContent=ev.actionSub;
   $('controls-hint').innerHTML=rowing
-    ?'<b>L ↔ R</b> alternate oars <span class="divider">/</span> <b>J</b> call a power ten'
+    ?'<b>L ↔ R</b> alternate oars <span class="divider">/</span> <b>J</b> sprint ×2'
     :'<b>L ↔ R</b> alternate to run <span class="divider">/</span> <b>J</b> time your jump';
   $('rhythm-title').textContent=rowing?'STROKE RHYTHM':'YOUR RHYTHM';
   $('rhythm-copy').innerHTML=rowing
-    ?'Smooth strokes ride clean water. <strong>Do not blow up.</strong><br/>J calls a power ten — twice a race.'
+    ?'Smooth strokes ride clean water. <strong>Do not blow up.</strong><br/>J sprints — twice a race.'
     :'Quicker taps. <strong>Faster feet.</strong><br/>Jump when the J button lights up.';
   $('leg-l-label').textContent=rowing?'PORT OAR':'LEFT LEG';
   $('leg-l-sub').textContent=rowing?'PULL':'ALTERNATE';
@@ -297,7 +297,7 @@ function renderHud(){
     // On the water the ten pips are the crew's remaining stamina.
     const lit=Math.round(p.stamina*10);
     [...$('hurdle-pips').children].forEach((el,i)=>el.className=i<lit-1?'clear':(i===lit-1?'next':''));
-    $('hurdle-pips').setAttribute('aria-label',`Stamina ${Math.round(p.stamina*100)} percent, ${p.powerCharges} power tens left`);
+    $('hurdle-pips').setAttribute('aria-label',`Stamina ${Math.round(p.stamina*100)} percent, ${p.powerCharges} sprints left`);
   }else{
     [...$('hurdle-pips').children].forEach((el,i)=>el.className=p.hurdleResults[i]??(i===p.hurdleIndex?'next':''));
     $('hurdle-pips').setAttribute('aria-label',`${p.cleared} hurdles cleared, ${p.falls} collisions`);
@@ -308,16 +308,16 @@ function renderHud(){
   const powerReady=rowing&&engine.phase==='racing'&&p.powerCharges>0&&p.powerTen<=0&&p.crabRemaining===0&&p.speed>1.5;
   const cue=rowing?powerReady:(engine.phase==='racing'&&w.ideal&&p.jumpAge===null&&p.fallRemaining===0);
   controls.find(b=>b.dataset.action==='J').classList.toggle('cue',cue);
-  if(rowing)$('jump-sub').textContent=p.powerCharges>0?`TEN · ${p.powerCharges} LEFT`:'TEN · USED';
+  if(rowing)$('jump-sub').textContent=p.powerCharges>0?`×${p.powerCharges} LEFT`:'USED';
   const status=$('jump-status');status.classList.toggle('perfect',cue);
   if(engine.phase==='ready')status.textContent=rowing?'L ↔ R · ROW WHEN READY':'L ↔ R · GET READY';
   else if(p.finishTime!==null)status.textContent=rowing?'FINISH · GLIDE HOME!':'FINISH · WELL RUN!';
   else if(engine.phase==='paused')status.textContent='Paused';
   else if(rowing&&p.falseStart&&engine.time<ROWING.falseStartLock)status.textContent='FALSE START · BOAT HELD';
   else if(rowing&&p.crabRemaining>0)status.textContent='CRAB! HOLD YOUR LINE';
-  else if(rowing&&p.powerTen>0)status.textContent='POWER TEN! LIFT THE BOAT';
+  else if(rowing&&p.powerTen>0)status.textContent='SPRINT! LIFT THE BOAT';
   else if(rowing&&p.stamina<=.02)status.textContent='SPENT · EASE OFF AND RESET';
-  else if(rowing&&cue)status.textContent='POWER TEN READY — PRESS J';
+  else if(rowing&&cue)status.textContent='SPRINT READY — PRESS J';
   else if(rowing&&p.swing)status.textContent='SWING · CLEAN WATER';
   else if(rowing)status.textContent=`${Math.max(0,dist-p.x).toFixed(0)}m TO GO · HOLD THE RHYTHM`;
   else if(p.fallRemaining>0)status.textContent='GETTING UP… KEEP GOING';
@@ -338,10 +338,10 @@ function consumeEvents(){
     if(event.runnerId!==PLAYER_ID)continue;
     if(event.type==='step')tone(event.leg==='L'?110:145,.026,.012,'triangle');
     if(event.type==='repeat'&&performance.now()>feedbackUntil)showFeedback(engine.mode==='rowing'?'SAME OAR — SWITCH':'L ↔ R',false,350);
-    // Rowing: a stuck oar, a jump on the gun, and the coxswain's power ten.
+    // Rowing: a stuck oar, a jump on the gun, and the coxswain's sprint.
     if(event.type==='crab'){showFeedback('CRAB!',true,850);tone(140,.3,.07,'sawtooth',55);vibrate([40,30,60]);$('announcer').textContent='You caught a crab. Hold your line and row again.';}
     if(event.type==='falsestart'){showFeedback('FALSE START',true,1000);tone(120,.32,.07,'sawtooth',80);$('announcer').textContent='False start. The boat is held for a moment.';}
-    if(event.type==='power'){showFeedback('POWER TEN!');tone(392,.16,.04);vibrate(24);$('announcer').textContent='Power ten called.';}
+    if(event.type==='power'){showFeedback('SPRINT!');tone(392,.16,.04);vibrate(24);$('announcer').textContent='Sprint!';}
     if(event.type==='jump')tone(270,.16,.035,'square',760);
     if(event.type==='clear'){showFeedback(event.perfect?'PERFECT!':'NICE JUMP!');tone(event.perfect?1047:784,.12,.035);vibrate(16);$('announcer').textContent=`${engine.player.cleared} hurdles cleared`;
     }
@@ -486,7 +486,7 @@ function netFx(events){
       if(ev.type==='clear'){ showFeedback(ev.perfect?'PERFECT!':'NICE JUMP!'); tone(ev.perfect?1047:784,.12,.035); vibrate(16); $('announcer').textContent='Hurdle cleared'; }
       else if(ev.type==='crab'){ showFeedback('CRAB!',true,800); tone(140,.3,.07,'sawtooth',55); vibrate([40,30,60]); $('announcer').textContent='You caught a crab. Hold your line!'; }
       else if(ev.type==='falsestart'){ showFeedback('FALSE START',true,1000); tone(120,.32,.07,'sawtooth',80); $('announcer').textContent='False start. The boat is held.'; }
-      else if(ev.type==='power'){ showFeedback('POWER TEN!'); tone(392,.16,.04); $('announcer').textContent='Power ten called.'; }
+      else if(ev.type==='power'){ showFeedback('SPRINT!'); tone(392,.16,.04); $('announcer').textContent='Sprint!'; }
       else if(ev.type==='fall'){ showFeedback('OUCH!',true,800); tone(180,.23,.07,'sawtooth',50); vibrate([50,30,60]); $('announcer').textContent='You hit a hurdle. Get back up!'; }
       else if(ev.type==='finish'){ tone(1047,.35,.05); const me=net.view.player; $('announcer').textContent=`Finished! ${me?.finishTime!=null?formatTime(me.finishTime)+' seconds':''}`; }
     }
@@ -523,7 +523,7 @@ function netChrome(){
   $('race-caption').textContent = ev.caption;
   $('jump-label').textContent = ev.action;
   $('controls-hint').innerHTML = rowing
-    ? '<b>L ↔ R</b> alternate oars <span class="divider">/</span> <b>J</b> call a power ten'
+    ? '<b>L ↔ R</b> alternate oars <span class="divider">/</span> <b>J</b> sprint ×2'
     : '<b>L ↔ R</b> alternate to run <span class="divider">/</span> <b>J</b> time your jump';
   $('rhythm-title').textContent = rowing ? 'STROKE RHYTHM' : 'YOUR RHYTHM';
   $('leg-l-label').textContent = rowing ? 'PORT OAR' : 'LEFT LEG';
@@ -565,7 +565,7 @@ function netRenderHud(){
   const powerReady = rowing && racing && net.view.phase==='racing' && own && own.powerCharges>0 && own.powerTen<=0 && own.crabRemaining===0 && own.speed>1.5;
   const cue = rowing ? powerReady : (racing && net.view.phase==='racing' && w.ideal && own && own.jumpAge===null && own.fallRemaining===0);
   controls.find(b=>b.dataset.action==='J').classList.toggle('cue',!!cue);
-  if(rowing && own) $('jump-sub').textContent = own.powerCharges>0 ? `TEN · ${own.powerCharges} LEFT` : 'TEN · USED';
+  if(rowing && own) $('jump-sub').textContent = own.powerCharges>0 ? `×${own.powerCharges} LEFT` : 'USED';
   const status = $('jump-status'); status.classList.toggle('perfect',!!cue);
   if(net.screen==='menu') status.textContent = 'CREATE OR JOIN A ROOM';
   else if(net.screen==='lobby') status.textContent = netIsHost() ? 'PRESS START WHEN READY' : 'Waiting for the host…';
@@ -574,9 +574,9 @@ function netRenderHud(){
   else if(net.view.phase==='countdown') status.textContent = 'ON YOUR MARKS…';
   else if(rowing&&own.crabRemaining>0) status.textContent = 'CRAB! HOLD YOUR LINE';
   else if(own.fallRemaining>0) status.textContent = 'GETTING UP… KEEP GOING';
-  else if(rowing&&own.powerTen>0) status.textContent = 'POWER TEN! LIFT THE BOAT';
+  else if(rowing&&own.powerTen>0) status.textContent = 'SPRINT! LIFT THE BOAT';
   else if(rowing&&(own.stamina??1)<=.02) status.textContent = 'SPENT · EASE OFF AND RESET';
-  else if(cue) status.textContent = rowing?'POWER TEN READY — PRESS J':'JUMP NOW!';
+  else if(cue) status.textContent = rowing?'SPRINT READY — PRESS J':'JUMP NOW!';
   else if(own.jumpAge!==null) status.textContent = 'AIRBORNE';
   else if(rowing&&own.swing) status.textContent = 'SWING · CLEAN WATER';
   else if(rowing) status.textContent = `${Math.max(0,net.view.distance-own.x).toFixed(0)}m TO GO · HOLD THE RHYTHM`;

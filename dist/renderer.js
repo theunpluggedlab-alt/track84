@@ -326,26 +326,52 @@ export class TrackRenderer {
       c.strokeStyle='#ffffff3d';c.lineWidth=Math.max(1,p*.7);
       c.beginPath();c.moveTo(-len*.5,-hull*.4);c.lineTo(-len*.5-tail*.75,-hull*1.6);c.moveTo(-len*.5,hull*.4);c.lineTo(-len*.5-tail*.75,hull*1.6);c.stroke();
     }
-    const blade=(bx,by,far)=>{rect(bx-p*.9,by-p*.5,p*3.2,p*1.6,far?'#cfd6e6':'#e9edf7');if(drive)rect(bx+p*1.2,by-p*.4,p*2,p*1.4,'#ffffff88');};
-    const grip=-len*.06-drive*len*.16;
+    // Stroke cycle around a fixed rigger: at the catch the blades plant near
+    // the bow, sweep aft through the drive, and feather home on recovery.
+    // Seat, torso, arms and catch splash all ride the same phase.
+    const dp = drive ? phase / .55 : 0;
+    const rp = drive || !moving ? 0 : (phase - .55) / .45;
+    const sweep = !moving ? 0 : drive ? len * .14 - dp * len * .26 : -len * .12 + rp * len * .26;
+    const slide = !moving ? 0 : drive ? -len * .1 + dp * len * .2 : len * .1 - rp * len * .2;
+    const lean = !moving ? 0 : -sweep * .25;
+    const pivot = -len * .06;
+    const tipX = pivot + len * .5 + sweep;
+    const grip = pivot - sweep * .45 + lean * .3;
+    const foam = (n) => ((r.strokes * 53 + lane * 17 + n * 29) % 5) - 2;
+    const splash = moving && phase < .16;
+    const blade = (by, far) => {
+      rect(tipX - p * .9, by - p * .5, p * 3.2, p * (drive ? 1.8 : 1.2), far ? '#cfd6e6' : '#e9edf7');
+      if (drive) rect(tipX + p * 1.2, by - p * .4, p * 2, p * 1.4, '#ffffff88');
+      else rect(tipX - p * .9, by + p * .7, p * 3.2, p * .5, '#8f95ad88');
+      if (splash) for (let s = 0; s < 3; s++) rect(tipX + foam(s) * p * 1.4 - p, by + foam(s + 3) * p * 1.2 - p * .5, p * 1.1, p * 1.1, '#ffffffcc');
+    };
+    const shaft = (y, color) => {
+      const x0 = Math.min(grip, tipX), x1 = Math.max(grip, tipX + p * 2);
+      rect(x0, y, x1 - x0, p * .8, color);
+    };
     // Far oar, then the hull, then the crew, then the near oar on top.
-    rect(grip,-hull*.5-p*3.4,len*.5+p*2,p*.8,'#8f95ad');
-    blade(grip+len*.5,-hull*1.5,true);
+    shaft(-hull * .5 - p * 3.4, '#8f95ad');
+    blade(-hull * 1.5, true);
     c.beginPath();c.moveTo(-len*.5,0);c.lineTo(-len*.34,-hull*.5);c.lineTo(len*.34,-hull*.5);c.lineTo(len*.5,0);c.lineTo(len*.34,hull*.5);c.lineTo(-len*.34,hull*.5);c.closePath();
     c.fillStyle=r.color;c.fill();c.strokeStyle='#00000055';c.lineWidth=1;c.stroke();
     rect(-len*.34,-hull*.5,len*.68,Math.max(1,hull*.22),'#ffffff55');
-    const seat=-len*.06+(drive?len*.09:-len*.09);
+    const seat=pivot+slide;
     rect(seat-len*.05,-hull*.5-p*2.2,len*.1,p*.9,dark);
-    rect(seat-len*.02,-hull*.5-p*6.6,p*3.4,p*4.4,crab?'#ff9b85':r.color);
-    rect(seat+p*.6,-hull*.5-p*5.4,p*2.6,p*1.6,crab?dark:skin);
-    rect(seat+p*1.4,-hull*.5-p*6.8,p*3.6,Math.max(p*.8,1),skin);
-    rect(seat+p*3,-hull*.5-p*7.6,p*1.8,p*2,skin);
-    rect(seat-len*.02,-hull*.5-p*8.4,p*3.6,p*1.6,dark);
+    // Legs brace toward the stern-side stretcher; torso leans with the arc.
+    rect(seat-len*.12,-hull*.5-p*1.6,len*.1,p*1.1,dark);
+    rect(seat-len*.02+lean,-hull*.5-p*6.6,p*3.4,p*4.4,crab?'#ff9b85':r.color);
+    rect(seat+p*.6+lean,-hull*.5-p*5.4,p*2.6,p*1.6,crab?dark:skin);
+    // Arms reach from the shoulders to the handle.
+    const armY=-hull*.5-p*5.6;
+    rect(Math.min(seat+lean,grip),armY,Math.abs(grip-seat-lean)+p*2,p*1.2,skin);
+    rect(seat+p*1.4+lean*1.4,-hull*.5-p*6.8,p*3.6,Math.max(p*.8,1),skin);
+    rect(seat+p*3+lean*1.5,-hull*.5-p*7.6,p*1.8,p*2,skin);
+    rect(seat-len*.02+lean,-hull*.5-p*8.4,p*3.6,p*1.6,dark);
     if(crab)rect(seat-p*2,-hull*.5-p*10.6,p*4,p*1.8,'#ff8e77');
     else if(r.powerTen>0){for(let i=0;i<3;i++)rect(-len*.5-p*(2+i*2.4),-p*1.4+Math.sin(now*.02+i)*p,i>0?p*1.4:p*2,p*(2.4-i*.5),['#ffd166','#ff8a3d','#ff5b3d'][i]);}
     else if(r.swing)rect(-len*.5-p*1.6,-p*.6,p*1.4,p*1.2,'#9ff0ff99');
-    rect(grip,-hull*.5+p*2.6,len*.5+p*2,p*.8,'#b9c0d6');
-    blade(grip+len*.5,-hull*.5+p*4.2,false);
+    shaft(-hull*.5+p*2.6,'#b9c0d6');
+    blade(-hull*.5+p*4.2,false);
     if(r.speed>9){const n=Math.min(4,(r.speed/5)|0);for(let i=0;i<n;i++)rect(len*.45+i*p*1.7,-hull*.5+Math.sin(now*.01+i)*p*.7,p,p,'#ffffffbb');}
     if(r.human){
       c.fillStyle='#d5ff64';c.font=`bold ${Math.max(10,p*4)}px monospace`;c.textAlign='center';

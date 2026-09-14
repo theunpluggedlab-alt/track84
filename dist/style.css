@@ -259,14 +259,18 @@ body{touch-action:manipulation;overscroll-behavior-y:none;min-height:100dvh}
   .stage-name{font-size:clamp(18px,6vw,22px)}
   .stage-select{font-size:13px}
 /* Olympic event picker on the start card (110m hurdles / 500m single sculls). */
-.event-picker{display:flex;gap:6px;justify-content:center;margin:0 auto 12px;max-width:360px;width:100%}
-.event-option{flex:1 1 0;min-width:0;font-family:inherit;font-size:12px;line-height:1.35;color:#c9c4e4;background:#1b1f33;border:1px solid #4b4666;border-radius:6px;padding:9px 6px;min-height:42px;cursor:pointer}
-.event-option:hover{border-color:var(--violet)}
-.event-option[aria-pressed="true"]{background:var(--lime);border-color:var(--lime);color:#20251b;font-weight:800}
+.event-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:0 auto 12px;max-width:380px;width:100%}
+.event-card{display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;color:var(--text);background:#1b1f33;border:1px solid #4b4666;border-radius:8px;padding:10px 6px;cursor:pointer;min-height:0}
+.event-card:hover{border-color:var(--violet)}
+.event-card[aria-pressed="true"]{background:var(--lime);border-color:var(--lime);color:#20251b}
+.event-icon{font-size:26px;line-height:1.2}
+.event-name{font-size:12px;font-weight:800;white-space:nowrap}
+.event-blurb{font-size:10px;color:#9aa0b6;line-height:1.4}
+.event-card[aria-pressed="true"] .event-blurb{color:#3c4a22}
 /* On the water the race-strip pips are the crew's stamina, so the last lit pip
    is the warning light rather than the next hurdle. */
 .hurdle-pips[aria-label^="Stamina"] i.next{background:#ffc46a;border-color:#ffc46a}
-@media (max-width:520px){.event-option{font-size:10px;min-height:38px;padding:7px 4px}}
+@media (max-width:520px){.event-card{padding:8px 4px}.event-icon{font-size:22px}.event-name{font-size:11px;white-space:normal}.event-blurb{font-size:9px}}
   .link-button.net-cta{font-size:13px}
   .jump-status{font-size:10px}
 }
@@ -291,4 +295,8 @@ body{touch-action:manipulation;overscroll-behavior-y:none;min-height:100dvh}
   body.kb-open .stage-select{margin-bottom:6px;padding:7px 10px}
   body.kb-open .net-menu .start-form{gap:5px}
   body.kb-open .net-menu .net-err{margin-top:0}
+  body.kb-open .event-picker{gap:6px;margin-bottom:8px}
+  body.kb-open .event-icon{font-size:20px}
+  body.kb-open .event-card{padding:7px 4px}
+  body.kb-open .event-blurb{display:none}
 }
