@@ -157,7 +157,7 @@ function formatTime(time){return time.toFixed(2).padStart(5,'0');}
 function renderOverlay(){
   let state=engine.phase;
   if(engine.player.finishTime!==null&&state!=='paused')state='results';
-  const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${selStage}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
+  const key=state==='countdown'?`countdown-${Math.ceil(engine.countdown)}`:state==='ready'?`ready-${selStage}-${session.event}-${!!(session.playerName||'').trim()}`:state==='results'?`results-${session.stageIndex}-${engine.player.finishTime}`:state;
   if(key===overlayKey){if(state==='results')renderResults();return;}
   overlayKey=key;$('overlay').hidden=state==='racing';
   if(state==='ready'){
@@ -165,7 +165,7 @@ function renderOverlay(){
     const i=selStage, s=STAGES[i], d=difficultyFor(i);
     const hasName=!!(session.playerName||'').trim();
     const options=STAGES.map((o,k)=>`<option value="${k}"${k===i?' selected':''}>${o.year} ${escapeHTML(o.city)} · ${escapeHTML(o.country)}</option>`).join('');
-    $('overlay').innerHTML=`<div class="stage-panel"><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
+    $('overlay').innerHTML=`<div class="stage-panel"><div class="event-picker" role="group" aria-label="Choose event">${EVENTS.map(e=>`<button type="button" class="event-option" data-event="${e.id}" aria-pressed="${e.id===session.event}">${escapeHTML(e.name)}</button>`).join('')}</div><div class="stage-nav"><button id="prev-stage" class="nav-button" aria-label="Previous Games" ${i<=0?'disabled':''}>◀</button><div class="start-kicker">STAGE ${String(i+1).padStart(2,'0')}/30 · ${d.label}</div><button id="next-stage-pick" class="nav-button" aria-label="Next Games" ${i>=STAGES.length-1?'disabled':''}>▶</button></div>
       <h2 class="stage-name">${s.year} <span>${escapeHTML(s.city).toUpperCase()}</span></h2>
       <p class="stage-place">${escapeHTML(s.stadium)} · ${escapeHTML(s.country)} · ${stars(d.stars)}</p>
       <select id="stage-select" class="stage-select" aria-label="Choose Games">${options}</select>
@@ -174,6 +174,7 @@ function renderOverlay(){
         : `<form id="start-form" class="start-form inline"><input id="player-name" name="playerName" aria-label="Player name" placeholder="YOUR NAME" maxlength="12" autocomplete="nickname" autocapitalize="words" enterkeyhint="go" spellcheck="false" required /><button id="start-race" type="submit" class="start-button" disabled>Start <span aria-hidden="true">▶</span></button></form><button id="open-net" class="link-button net-cta">👥 Multiplayer · up to 5 Players</button>`}</div>`;
     $('prev-stage').addEventListener('click',()=>pickStage(selStage-1));
     $('next-stage-pick').addEventListener('click',()=>pickStage(selStage+1));
+    [...$('overlay').querySelectorAll('.event-option')].forEach(b=>b.addEventListener('click',()=>pickEvent(b.dataset.event)));
     $('stage-select').addEventListener('change',event=>pickStage(Number(event.target.value)));
     $('open-net').addEventListener('click',()=>{unlockAudio();netOpenMenu();});
     if(hasName){
