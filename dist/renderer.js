@@ -1,5 +1,6 @@
 import {RULES} from './engine.js';
 import { ROWING } from './events.js';
+import { advanceStroke, rowingPose } from './rowing-animation.js';
 import { STAGES } from './stages.js';
 
 const FALLBACK = { year: 1984, city: 'Los Angeles', country: 'United States', cc: 'US', code: 'USA', stadium: "Stadium '84", flag: 'US', sky: ['#6b7fb8', '#2a2a4a'], stand: ['#4c4a5f', '#444357'], roof: '#3a3f4a', accent: '#d5ff64', landmark: 'palms' };
@@ -8,7 +9,7 @@ export class TrackRenderer {
   constructor(canvas){
     this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.width=1000;this.height=470;
     this.stadium=new Image();this.stadium.src='./assets/stadium.png';this.camera=0;
-    this.crowdSeed=1234567;
+    this.crowdSeed=1234567;this.rowingAnimations=new WeakMap();
     this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
   }
   resize(){const b=this.canvas.getBoundingClientRect();this.width=Math.max(1,b.width);this.height=Math.max(1,b.height);const d=Math.min(devicePixelRatio||1,2);this.canvas.width=Math.round(this.width*d);this.canvas.height=Math.round(this.height*d);this.ctx.setTransform(d,0,0,d,0,0);this.ctx.imageSmoothingEnabled=false;}
@@ -294,7 +295,7 @@ export class TrackRenderer {
       c.strokeStyle=stage.accent||'#d5ff64';c.lineWidth=1;c.strokeRect(Math.round(fin)-45.5,waterTop-15.5,99,14);
       c.fillStyle='#f3f1ff';c.textAlign='center';c.fillText('FINISH',Math.round(fin)+4,waterTop-5);c.textAlign='left';
     }
-    for(let lane=4;lane>=0;lane--){
+    for(let lane=0;lane<5;lane++){
       const r=e.runners[lane];if(!r)continue;
       const x=sx(r.x,lane),y=sy(x,lane);
       if(x>-90&&x<w+90)this.boat(x,y,r,e,laneH,now);
@@ -308,77 +309,105 @@ export class TrackRenderer {
     c.fillStyle='#070a1214';for(let y=0;y<h;y+=4)c.fillRect(0,y,w,1);
     if(e.phase==='racing'&&e.player.crabRemaining>0){c.fillStyle='#ed755117';c.fillRect(0,0,w,h);}
   }
-  // A single scull: pointed hull, sliding seat, two blades, wake and spray.
+  // One coordinate system, scaled once, keeps rower / shell / oars in proportion.
   boat(x,y,r,e,laneH,now){
-    const c=this.ctx,p=Math.max(1.5,Math.min(3,laneH/21));
-    const len=Math.max(24,laneH*1.02),hull=Math.max(5,laneH*.2);
-    const crab=r.crabRemaining>0,moving=r.speed>.4;
-    const phase=moving?((r.strokes+now*.001*(r.cadence||0))%1):0;
-    const drive=phase<.55;
-    const skin='#f3bc91',dark='#252237';
-    const rect=(px,py,pw,ph,color)=>{c.fillStyle=color;c.fillRect(Math.round(px*p),Math.round(py*p),Math.ceil(pw*p),Math.ceil(ph*p));};
-    c.save();c.translate(Math.round(x),Math.round(y));
-    if(crab)c.rotate(Math.sin(now*.02)*.16+(r.lane%2?-.08:.08));
+    const c=this.ctx,p=Math.max(.6,Math.min(1.8,laneH/38));
+    let animations=this.rowingAnimations.get(e);
+    if(!animations){animations=new Map();this.rowingAnimations.set(e,animations);}
+    const stroke=advanceStroke(animations.get(r.id),r,e.time);
+    animations.set(r.id,stroke);
+    const pose=rowingPose(stroke.phase),crab=r.crabRemaining>0,moving=r.speed>.4;
+    const {hip,shoulder,knee,foot,handleX,drive}=pose;
+    const dark='#202638',skin='#f3bc91',shade='#b97963';
+    const time=e.time;
+    c.save();c.translate(Math.round(x),Math.round(y));c.scale(p,p);
+    c.lineCap='round';c.lineJoin='round';
+    if(crab)c.rotate(Math.sin(time*15)*.07);
+    const rect=(x,y,w,h,color)=>{c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),w,h);};
+    const line=(points,color,width)=>{
+      c.strokeStyle=color;c.lineWidth=width;c.beginPath();
+      points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.stroke();
+    };
+    const poly=(points,color)=>{
+      c.fillStyle=color;c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fill();
+    };
     if(moving){
-      const tail=Math.min(len*2.4,r.speed*4.2);
-      c.fillStyle='#e8f4ff26';
-      c.beginPath();c.moveTo(-len*.45,-hull*.35);c.lineTo(-len*.45-tail,-hull*2.3);c.lineTo(-len*.45-tail,hull*2.3);c.lineTo(-len*.45,hull*.35);c.closePath();c.fill();
-      c.strokeStyle='#ffffff3d';c.lineWidth=Math.max(1,p*.7);
-      c.beginPath();c.moveTo(-len*.5,-hull*.4);c.lineTo(-len*.5-tail*.75,-hull*1.6);c.moveTo(-len*.5,hull*.4);c.lineTo(-len*.5-tail*.75,hull*1.6);c.stroke();
+      const tail=Math.min(52,r.speed*2.6);
+      poly([[-34,-1],[-34-tail,-6],[-34-tail,6],[-34,2]],'#e8f4ff20');
+      line([[-35-tail,-5],[-35,-1]],'#bceaff77',.8);
+      line([[-35-tail,5],[-35,2]],'#bceaff77',.8);
     }
-    // Stroke cycle around a fixed rigger: at the catch the blades plant near
-    // the bow, sweep aft through the drive, and feather home on recovery.
-    // Seat, torso, arms and catch splash all ride the same phase.
-    const dp = drive ? phase / .55 : 0;
-    const rp = drive || !moving ? 0 : (phase - .55) / .45;
-    const sweep = !moving ? 0 : drive ? len * .14 - dp * len * .26 : -len * .12 + rp * len * .26;
-    const slide = !moving ? 0 : drive ? -len * .1 + dp * len * .2 : len * .1 - rp * len * .2;
-    const lean = !moving ? 0 : -sweep * .25;
-    const pivot = -len * .06;
-    const tipX = pivot + len * .5 + sweep;
-    const grip = pivot - sweep * .45 + lean * .3;
-    const foam = (n) => ((r.strokes * 53 + r.lane * 17 + n * 29) % 5) - 2;
-    const splash = moving && phase < .16;
-    const blade = (by, far) => {
-      rect(tipX - p * .9, by - p * .5, p * 3.2, p * (drive ? 1.8 : 1.2), far ? '#cfd6e6' : '#e9edf7');
-      if (drive) rect(tipX + p * 1.2, by - p * .4, p * 2, p * 1.4, '#ffffff88');
-      else rect(tipX - p * .9, by + p * .7, p * 3.2, p * .5, '#8f95ad88');
-      if (splash) for (let s = 0; s < 3; s++) rect(tipX + foam(s) * p * 1.4 - p, by + foam(s + 3) * p * 1.2 - p * .5, p * 1.1, p * 1.1, '#ffffffcc');
+    // Riggers stay fixed to the shell. Handle, pin and blade are collinear;
+    // both sculls sweep together, with feathered blades during recovery.
+    const oar=(side)=>{
+      const pin=[0,-5+side*3],hx=crab&&side===1?-11:handleX;
+      const reach=Math.sqrt(12*12-hx*hx);
+      const hand=[hx,pin[1]-side*reach*.28-2.5];
+      const tip=[pin[0]+(pin[0]-hand[0])*2.2,pin[1]+(pin[1]-hand[1])*2.2];
+      line([[-6,-1],pin,[6,-1]],'#8fa8b8',1);
+      line([hand,pin,tip],dark,2.2);
+      line([hand,pin,tip],side<0?'#b4c7d3':'#edf1e4',1);
+      rect(pin[0]-1,pin[1]-1,2,2,'#e9bd68');
+      const vx=tip[0]-pin[0],vy=tip[1]-pin[1],length=Math.hypot(vx,vy);
+      const ux=vx/length,uy=vy/length;
+      const breadth=drive||crab?1.6:.45;
+      poly([[tip[0]-uy*breadth,tip[1]+ux*breadth],
+        [tip[0]+ux*6-uy*breadth,tip[1]+uy*6+ux*breadth],
+        [tip[0]+ux*6+uy*breadth,tip[1]+uy*6-ux*breadth],
+        [tip[0]+uy*breadth,tip[1]-ux*breadth]],side<0?'#d6e0eb':'#ffffff');
+      if(moving&&drive&&!crab){
+        line([[tip[0]-5,tip[1]+2],[tip[0]+2,tip[1]+2]],'#cff6ff99',.8);
+        if(stroke.phase<.1)for(let i=0;i<3;i++){
+          rect(tip[0]-2+i*3,tip[1]-2-Math.sin(stroke.phase*31+i)*2,1,1,'#f4ffff');
+        }
+      }
+      return hand;
     };
-    const shaft = (y, color) => {
-      const x0 = Math.min(grip, tipX), x1 = Math.max(grip, tipX + p * 2);
-      rect(x0, y, x1 - x0, p * .8, color);
+    const farHand=oar(-1);
+    // Long racing shell, inset cockpit and a visible sliding seat rail.
+    poly([[-37,0],[-24,-3],[24,-3],[38,0],[25,3],[-25,3]],dark);
+    poly([[-35,-.5],[-23,-2],[24,-2],[36,0],[23,2],[-24,2]],r.color);
+    line([[-26,-2],[25,-2]],'#ffffff99',.8);
+    poly([[-17,-2],[-13,-4],[14,-4],[18,-1],[13,1],[-13,1]],'#182d3d');
+    line([[-5,-1],[12,-1]],'#8b9cac',1);
+    rect(hip[0]-3,-2,6,2,'#c9d3dd');
+    // Feet face left (stern), opposite the bow and direction of travel.
+    line([[hip[0],hip[1]-1],[knee[0],knee[1]-1],[foot[0],foot[1]-1]],shade,2.5);
+    line([hip,knee,foot],dark,4);
+    line([hip,knee,foot],skin,2.5);
+    line([hip,[hip[0]+(knee[0]-hip[0])*.4,hip[1]+(knee[1]-hip[1])*.4]],dark,4);
+    rect(-17,-4,4,3,'#edf1e4');
+    line([hip,shoulder],dark,6);
+    line([[hip[0],hip[1]-1],shoulder],crab?'#ff9b85':r.color,4.5);
+    line([[shoulder[0]+1,shoulder[1]+2],[hip[0]+1,hip[1]-2]],'#ffffff66',1);
+    const arm=(hand,color)=>{
+      // Elbow draws behind the torso at the finish, then hands lead recovery.
+      const pull=Math.max(0,(handleX-1)/7);
+      const elbow=[(shoulder[0]+hand[0])*.5+pull*4,(shoulder[1]+hand[1])*.5+1];
+      line([shoulder,elbow,hand],dark,3);
+      line([shoulder,elbow,hand],color,1.8);
     };
-    // Far oar, then the hull, then the crew, then the near oar on top.
-    shaft(-hull * .5 - p * 3.4, '#8f95ad');
-    blade(-hull * 1.5, true);
-    c.beginPath();c.moveTo(-len*.5,0);c.lineTo(-len*.34,-hull*.5);c.lineTo(len*.34,-hull*.5);c.lineTo(len*.5,0);c.lineTo(len*.34,hull*.5);c.lineTo(-len*.34,hull*.5);c.closePath();
-    c.fillStyle=r.color;c.fill();c.strokeStyle='#00000055';c.lineWidth=1;c.stroke();
-    rect(-len*.34,-hull*.5,len*.68,Math.max(1,hull*.22),'#ffffff55');
-    const seat=pivot+slide;
-    rect(seat-len*.05,-hull*.5-p*2.2,len*.1,p*.9,dark);
-    // Legs brace toward the stern-side stretcher; torso leans with the arc.
-    rect(seat-len*.12,-hull*.5-p*1.6,len*.1,p*1.1,dark);
-    rect(seat-len*.02+lean,-hull*.5-p*6.6,p*3.4,p*4.4,crab?'#ff9b85':r.color);
-    rect(seat+p*.6+lean,-hull*.5-p*5.4,p*2.6,p*1.6,crab?dark:skin);
-    // Arms reach from the shoulders to the handle.
-    const armY=-hull*.5-p*5.6;
-    rect(Math.min(seat+lean,grip),armY,Math.abs(grip-seat-lean)+p*2,p*1.2,skin);
-    rect(seat+p*1.4+lean*1.4,-hull*.5-p*6.8,p*3.6,Math.max(p*.8,1),skin);
-    rect(seat+p*3+lean*1.5,-hull*.5-p*7.6,p*1.8,p*2,skin);
-    rect(seat-len*.02+lean,-hull*.5-p*8.4,p*3.6,p*1.6,dark);
-    if(crab)rect(seat-p*2,-hull*.5-p*10.6,p*4,p*1.8,'#ff8e77');
-    else if(r.powerTen>0){for(let i=0;i<3;i++)rect(-len*.5-p*(2+i*2.4),-p*1.4+Math.sin(now*.02+i)*p,i>0?p*1.4:p*2,p*(2.4-i*.5),['#ffd166','#ff8a3d','#ff5b3d'][i]);}
-    else if(r.swing)rect(-len*.5-p*1.6,-p*.6,p*1.4,p*1.2,'#9ff0ff99');
-    shaft(-hull*.5+p*2.6,'#b9c0d6');
-    blade(-hull*.5+p*4.2,false);
-    if(r.speed>9){const n=Math.min(4,(r.speed/5)|0);for(let i=0;i<n;i++)rect(len*.45+i*p*1.7,-hull*.5+Math.sin(now*.01+i)*p*.7,p,p,'#ffffffbb');}
-    if(r.human){
-      c.fillStyle='#d5ff64';c.font=`bold ${Math.max(10,p*4)}px monospace`;c.textAlign='center';
-      c.fillText(r.name||'YOU',0,-laneH*.72,Math.min(110,Math.max(60,x*1.2)));
-      c.fillRect(-p*.6,-laneH*.72+p*.6,p*1.2,p*.7);
-      c.textAlign='left';
-    }
+    arm(farHand,shade);
+    const headX=shoulder[0]-2;
+    rect(headX,-17,4,4,skin);
+    rect(headX-1,-16,1,2,skin); // nose points toward stern
+    rect(headX,-18,4,1.5,dark);
+    rect(headX,-16,1,1,dark);
+    rect(headX+2,-14,2,2,skin);
+    const nearHand=oar(1);
+    arm(nearHand,skin);
+    rect(nearHand[0]-1,nearHand[1]-1,2,2,skin);
+    if(crab){
+      rect(15,-15,2,5,'#ff9b85');rect(15,-8,2,2,'#ff9b85');
+    }else if(r.powerTen>0){
+      for(let i=0;i<3;i++)line([[-39-i*5,-2+i*2],[-43-i*5,-2+i*2]],['#ffd166','#ffad66','#ff754d'][i],1.8);
+    }else if(r.swing)line([[-41,1],[-47,1]],'#9ff0ff',1);
+    if(r.speed>9)for(let i=0;i<3;i++)rect(36+i*2,Math.sin(time*12+i)*1.5,1,1,'#ffffffbb');
     c.restore();
+    if(r.human){
+      c.fillStyle='#d5ff64';c.font=`bold ${Math.max(9,p*7)}px monospace`;c.textAlign='center';
+      c.fillText(r.name||'YOU',x+25*p,y-12*p,70*p);
+      c.fillRect(x+25*p-1,y-9*p,2,2);c.textAlign='left';
+    }
   }
 }
