@@ -63,7 +63,7 @@
 .net-menu .start-form{gap:8px}
 .net-menu input{padding:9px 12px}
 .net-menu .net-join{margin-top:0}
-.net-menu .net-join input{font-size:15px;letter-spacing:2px;flex:0 0 76px}
+.net-menu .net-join input{font-size:16px;letter-spacing:2px;flex:0 0 76px}
 .net-menu .net-join .start-button{flex:1 1 auto;justify-content:center;margin-top:0;padding:12px 10px;font-size:14px;gap:8px}
 .net-menu .net-join .secondary-button{flex:0 0 auto;min-height:0;padding:12px 14px}
 .net-menu .link-button{margin-top:0}
@@ -71,7 +71,7 @@
 .net-menu .net-err{margin-top:2px}
 .net-err:empty{display:none}
 .net-ping{font-size:11px;color:#9aa0b6}
-#net-host{font-size:14px}
+#net-host{font-size:16px}
 @media(max-width:700px){
   .room-code{letter-spacing:4px}
   .slot{font-size:11px;padding:5px 8px}
@@ -265,4 +265,21 @@ body{touch-action:manipulation;overscroll-behavior-y:none;min-height:100dvh}
   .screen-overlay{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
   .screen-overlay>*{margin:auto;flex:0 1 auto;min-height:0;min-width:0;max-width:100%}
   .stage-panel,.results-panel,.paused-panel{max-height:100%;overflow-y:auto;overflow-x:hidden}
+  body.kb-open .screen-overlay>*{margin:0 auto}
+}
+/* ============ HOTFIX: virtual keyboard covering name/code inputs ============
+   The overlay is absolutely positioned inside the arena, so mobile browsers
+   never scroll its inputs into view when the keyboard opens. JS (game.js)
+   toggles body.kb-open and scrolls the focused field into view; here the
+   panel pins to the top and compacts so the field + submit stay visible. */
+@media(max-width:700px){
+  body.kb-open .screen-overlay>*{margin:0 auto}
+  body.kb-open .stage-panel{padding:8px 10px}
+  body.kb-open .stage-name{font-size:18px;margin-bottom:2px}
+  body.kb-open .stage-name.small{font-size:17px}
+  body.kb-open .start-kicker{margin-bottom:6px}
+  body.kb-open .stage-place{display:none}
+  body.kb-open .stage-select{margin-bottom:6px;padding:7px 10px}
+  body.kb-open .net-menu .start-form{gap:5px}
+  body.kb-open .net-menu .net-err{margin-top:0}
 }

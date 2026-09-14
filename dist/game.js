@@ -553,6 +553,29 @@ soundUI();renderHud();
   if(field) field.value = code;
   if((session.playerName || '').trim()) netConnect(false);
 })();
+// Mobile keyboards resize the viewport but never scroll the focused input
+// into view inside our absolutely-positioned overlay, so the name/code
+// fields end up hidden behind the keyboard. Detect the keyboard via
+// visualViewport (focus events as fallback) and bring the field into view.
+function keyboardOpen(){
+  try{
+    if(window.visualViewport) return window.visualViewport.height < window.innerHeight * 0.8;
+  }catch{}
+  return document.activeElement instanceof HTMLInputElement;
+}
+function syncKeyboardClass(){
+  try{ document.body.classList.toggle('kb-open', keyboardOpen()); }catch{}
+}
+function revealFocusedField(delay){
+  const el = document.activeElement;
+  if(!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement) && !(el instanceof HTMLSelectElement)) return;
+  setTimeout(()=>{ try{ el.scrollIntoView({ block: 'center', inline: 'nearest' }); }catch{} }, delay);
+}
+try{
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>{ syncKeyboardClass(); revealFocusedField(80); });
+}catch{}
+document.addEventListener('focusin', ()=>{ syncKeyboardClass(); revealFocusedField(150); });
+document.addEventListener('focusout', ()=>setTimeout(syncKeyboardClass, 150));
 requestAnimationFrame(frame);
 // Test/debug handle (used by automated checks; no UI effect).
 window.__track84={session,engine,beginStage,quitToTitle,newGameFlow,net,netOpenMenu,netLeave};
